@@ -14,10 +14,10 @@ import { BaseGame } from './BaseGame';
 
 const BROADCAST_HZ = 20;
 
-const CHECKPOINT_COUNT = 5; // ids 0-4
+const CHECKPOINT_COUNT = 7; // ids 0-6
 const RANK_POINTS = [1000, 700, 500, 350, 250, 200];
 // Points awarded to players who didn't finish, based on last checkpoint reached
-const CP_CONSOLATION = [0, 100, 220, 360, 520];
+const CP_CONSOLATION = [0, 100, 220, 360, 520, 650, 800];
 
 interface ObbyPlayer {
   socketId: string;

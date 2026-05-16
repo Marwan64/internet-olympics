@@ -4,13 +4,14 @@ import { BaseGame, GameConfig } from './BaseGame';
 
 // ── Level constants (must match frontend) ─────────────────────────────────────
 
-export const LEVEL_WIDTH = 5000;
+export const LEVEL_WIDTH = 6600;
 export const GROUND_Y = 520;
 const PLAYER_H = 48;
 const GOOMBA_W = 36;
 const GOOMBA_H = 36;
 const BLOCK_SIZE = 32;
 const GOOMBA_SPEED = 70;
+const FAST_GOOMBA_SPEED = 130;
 
 export const PLATFORMS = [
   { x: 300, y: 420, w: 160, h: 20 },
@@ -30,6 +31,15 @@ export const PLATFORMS = [
   { x: 3800, y: 410, w: 160, h: 20 },
   { x: 4060, y: 360, w: 140, h: 20 },
   { x: 4300, y: 300, w: 160, h: 20 },
+  // Star Road section (x=4700-6100)
+  { x: 4700, y: 380, w: 140, h: 20 },
+  { x: 4900, y: 320, w: 120, h: 20 },
+  { x: 5080, y: 400, w: 140, h: 20 },
+  { x: 5280, y: 340, w: 120, h: 20 },
+  { x: 5450, y: 260, w: 140, h: 20 },
+  { x: 5650, y: 380, w: 120, h: 20 },
+  { x: 5820, y: 310, w: 140, h: 20 },
+  { x: 6000, y: 360, w: 140, h: 20 },
 ];
 
 export const QUESTION_BLOCKS = [
@@ -38,11 +48,14 @@ export const QUESTION_BLOCKS = [
   { id: 'b2', x: 1220, y: 400, powerUp: 'star' as const },
   { id: 'b3', x: 1340, y: 200, powerUp: 'speed' as const },
   { id: 'b4', x: 1740, y: 400, powerUp: 'speed' as const },
-  { id: 'b5', x: 2580, y: 160, powerUp: 'star' as const },
+  { id: 'b5', x: 2580, y: 160, powerUp: 'fire' as const },
   { id: 'b6', x: 2740, y: 400, powerUp: 'speed' as const },
   { id: 'b7', x: 3080, y: 190, powerUp: 'speed' as const },
-  { id: 'b8', x: 3740, y: 400, powerUp: 'star' as const },
+  { id: 'b8', x: 3740, y: 400, powerUp: 'fire' as const },
   { id: 'b9', x: 4310, y: 180, powerUp: 'star' as const },
+  { id: 'b10', x: 5150, y: 340, powerUp: 'fire' as const },
+  { id: 'b11', x: 5700, y: 160, powerUp: 'star' as const },
+  { id: 'b12', x: 6000, y: 400, powerUp: 'speed' as const },
 ];
 
 const GOOMBAS_INIT = [
@@ -55,9 +68,14 @@ const GOOMBAS_INIT = [
   { id: 'g6', startX: 3450, minX: 3320, maxX: 3580 },
   { id: 'g7', startX: 3950, minX: 3820, maxX: 4080 },
   { id: 'g8', startX: 4450, minX: 4320, maxX: 4620 },
+  // Star Road fast goombas
+  { id: 'g9',  startX: 4850, minX: 4720, maxX: 5000, fast: true },
+  { id: 'g10', startX: 5200, minX: 5090, maxX: 5370, fast: true },
+  { id: 'g11', startX: 5600, minX: 5460, maxX: 5740, fast: true },
+  { id: 'g12', startX: 5900, minX: 5730, maxX: 6050, fast: true },
 ];
 
-export const PIPE = { x: 4650, y: 360, w: 100, h: 160 };
+export const PIPE = { x: 6180, y: 360, w: 100, h: 160 };
 export const PLAYER_START = { x: 80, y: GROUND_Y - PLAYER_H };
 
 // ── Internal state ─────────────────────────────────────────────────────────────
@@ -77,26 +95,28 @@ interface BlockState {
   x: number;
   y: number;
   hit: boolean;
-  powerUp: 'speed' | 'star' | null;
+  powerUp: 'speed' | 'star' | 'fire' | null;
 }
 
 interface PowerUpItem {
   id: string;
   x: number;
   y: number;
-  type: 'speed' | 'star';
+  type: 'speed' | 'star' | 'fire';
   collected: boolean;
 }
 
 interface MarioPlayerState {
   x: number;
   y: number;
-  powerUp: null | 'speed' | 'star';
+  powerUp: null | 'speed' | 'star' | 'fire';
   powerUpExpiry: number;
   finished: boolean;
   finishRank: number;
   dead: boolean;
   respawnAt: number;
+  slowed: boolean;
+  slowExpiry: number;
 }
 
 // ── Game ───────────────────────────────────────────────────────────────────────
@@ -124,6 +144,8 @@ export class MarioGame extends BaseGame {
         finishRank: 0,
         dead: false,
         respawnAt: 0,
+        slowed: false,
+        slowExpiry: 0,
       });
     }
 
@@ -131,7 +153,7 @@ export class MarioGame extends BaseGame {
       id: g.id,
       x: g.startX,
       y: GROUND_Y - GOOMBA_H,
-      vx: -GOOMBA_SPEED,
+      vx: -(('fast' in g && g.fast) ? FAST_GOOMBA_SPEED : GOOMBA_SPEED),
       minX: g.minX,
       maxX: g.maxX,
       alive: true,
@@ -169,9 +191,10 @@ export class MarioGame extends BaseGame {
       }
     }
 
-    // Expire power-ups
+    // Expire power-ups and slow effects
     for (const s of this.playerStates.values()) {
-      if (s.powerUp && now > s.powerUpExpiry) s.powerUp = null;
+      if (s.powerUp && s.powerUp !== 'fire' && now > s.powerUpExpiry) s.powerUp = null;
+      if (s.slowed && now > s.slowExpiry) s.slowed = false;
       // Respawn dead players
       if (s.dead && now >= s.respawnAt) {
         s.dead = false;
@@ -215,7 +238,7 @@ export class MarioGame extends BaseGame {
             id: `pu_${block.id}`,
             x: block.x,
             y: block.y - 40,
-            type: block.powerUp,
+            type: block.powerUp as 'speed' | 'star' | 'fire',
             collected: false,
           };
           this.powerUps.push(pu);
@@ -239,7 +262,8 @@ export class MarioGame extends BaseGame {
 
         pu.collected = true;
         state.powerUp = pu.type;
-        state.powerUpExpiry = Date.now() + 8000;
+        // Fire flower is retained until used; others expire after 8s
+        state.powerUpExpiry = pu.type === 'fire' ? Date.now() + 60000 : Date.now() + 8000;
         this.io.to(this.config.roomId).emit('mario:powerup_collected' as any, {
           playerId, powerUpId: pu.id, type: pu.type,
         });
@@ -272,6 +296,28 @@ export class MarioGame extends BaseGame {
         target.dead = true;
         target.respawnAt = Date.now() + 3000;
         this.io.to(this.config.roomId).emit('mario:player_hit' as any, {
+          attackerId: playerId, targetId,
+        });
+        break;
+      }
+
+      case 'fire_hit': {
+        // Sender must have fire powerup, consume it, slow the target
+        if (state.powerUp !== 'fire') break;
+        const targetId = input.payload.targetId as string;
+        const target = this.playerStates.get(targetId);
+        if (!target || target.dead || target.finished) break;
+        const dx = Math.abs(state.x - target.x);
+        if (dx > 300) break; // proximity check
+
+        // Consume fire powerup
+        state.powerUp = null;
+
+        // Slow target for 3 seconds
+        target.slowed = true;
+        target.slowExpiry = Date.now() + 3000;
+
+        this.io.to(this.config.roomId).emit('mario:player_slow' as any, {
           attackerId: playerId, targetId,
         });
         break;
@@ -315,9 +361,9 @@ export class MarioGame extends BaseGame {
   protected onTick(_remaining: number): void { /* physics handled separately */ }
 
   private broadcastMarioState(): void {
-    const players: Record<string, { x: number; y: number; powerUp: string | null; finished: boolean; dead: boolean; rank: number }> = {};
+    const players: Record<string, { x: number; y: number; powerUp: string | null; finished: boolean; dead: boolean; rank: number; slowed: boolean }> = {};
     for (const [id, s] of this.playerStates) {
-      players[id] = { x: s.x, y: s.y, powerUp: s.powerUp, finished: s.finished, dead: s.dead, rank: s.finishRank };
+      players[id] = { x: s.x, y: s.y, powerUp: s.powerUp, finished: s.finished, dead: s.dead, rank: s.finishRank, slowed: s.slowed };
     }
     this.io.to(this.config.roomId).emit('mario:state' as any, {
       players,

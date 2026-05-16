@@ -6,7 +6,7 @@ import { useSocketActions, getSocket } from '@/hooks/useSocket';
 
 // ── Level constants (must match backend) ──────────────────────────────────────
 
-const LEVEL_WIDTH = 5000;
+const LEVEL_WIDTH = 6600;
 const GROUND_Y = 520;
 const CANVAS_W = 900;
 const CANVAS_H = 600;
@@ -38,6 +38,15 @@ const PLATFORMS = [
   { x: 3800, y: 410, w: 160, h: 20 },
   { x: 4060, y: 360, w: 140, h: 20 },
   { x: 4300, y: 300, w: 160, h: 20 },
+  // Star Road section (x=4700-6100)
+  { x: 4700, y: 380, w: 140, h: 20 },
+  { x: 4900, y: 320, w: 120, h: 20 },
+  { x: 5080, y: 400, w: 140, h: 20 },
+  { x: 5280, y: 340, w: 120, h: 20 },
+  { x: 5450, y: 260, w: 140, h: 20 },
+  { x: 5650, y: 380, w: 120, h: 20 },
+  { x: 5820, y: 310, w: 140, h: 20 },
+  { x: 6000, y: 360, w: 140, h: 20 },
 ];
 
 // All blocks positioned so player can be BELOW them to hit from underneath
@@ -47,14 +56,23 @@ const QUESTION_BLOCKS = [
   { id: 'b2', x: 1220, y: 400, powerUp: 'star' as const },
   { id: 'b3', x: 1340, y: 200, powerUp: 'speed' as const },
   { id: 'b4', x: 1740, y: 400, powerUp: 'speed' as const },
-  { id: 'b5', x: 2580, y: 160, powerUp: 'star' as const },
+  { id: 'b5', x: 2580, y: 160, powerUp: 'fire' as const },
   { id: 'b6', x: 2740, y: 400, powerUp: 'speed' as const },
   { id: 'b7', x: 3080, y: 190, powerUp: 'speed' as const },
-  { id: 'b8', x: 3740, y: 400, powerUp: 'star' as const },
+  { id: 'b8', x: 3740, y: 400, powerUp: 'fire' as const },
   { id: 'b9', x: 4310, y: 180, powerUp: 'star' as const },
+  { id: 'b10', x: 5150, y: 340, powerUp: 'fire' as const },
+  { id: 'b11', x: 5700, y: 160, powerUp: 'star' as const },
+  { id: 'b12', x: 6000, y: 400, powerUp: 'speed' as const },
 ];
 
-const PIPE = { x: 4650, y: 360, w: 100, h: 160 };
+// Piranha plants at these pipe positions (client-side time-based animation)
+const PIRANHA_PIPES = [
+  { x: 2310, pipeW: 80, pipeH: 80 },
+  { x: 3720, pipeW: 80, pipeH: 80 },
+];
+
+const PIPE = { x: 6180, y: 360, w: 100, h: 160 };
 const PLAYER_START = { x: 80, y: GROUND_Y - PLAYER_H };
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -62,16 +80,19 @@ const PLAYER_START = { x: 80, y: GROUND_Y - PLAYER_H };
 interface LocalPlayer {
   x: number; y: number; vx: number; vy: number;
   onGround: boolean; facing: 1 | -1;
-  powerUp: null | 'speed' | 'star'; powerUpExpiry: number;
+  powerUp: null | 'speed' | 'star' | 'fire'; powerUpExpiry: number;
   finished: boolean; dead: boolean; respawnAt: number;
   jumpPressed: boolean;
   walkPhase: number; // for shoe animation
+  slowed: boolean; slowUntil: number;
+  fireballCooldown: number;
 }
 
-interface RemotePlayer { x: number; y: number; powerUp: string | null; finished: boolean; dead: boolean; rank: number; facing?: number }
+interface RemotePlayer { x: number; y: number; powerUp: string | null; finished: boolean; dead: boolean; rank: number; facing?: number; slowed: boolean }
 interface GoombaClient { id: string; x: number; y: number; alive: boolean; squishAt: number }
-interface BlockClient { id: string; x: number; y: number; hit: boolean; bounceAt: number; powerUp: 'speed' | 'star' | null }
-interface PowerUpClient { id: string; x: number; y: number; type: 'speed' | 'star' }
+interface BlockClient { id: string; x: number; y: number; hit: boolean; bounceAt: number; powerUp: 'speed' | 'star' | 'fire' | null }
+interface PowerUpClient { id: string; x: number; y: number; type: 'speed' | 'star' | 'fire' }
+interface Fireball { id: number; x: number; y: number; vx: number; vy: number; spawnedAt: number; bounced: boolean; bounceCount: number }
 
 // ── Mario sprite drawing ──────────────────────────────────────────────────────
 
@@ -86,6 +107,7 @@ function drawMario(
   starMode = false,
   speedMode = false,
   dead = false,
+  fireMode = false,
 ) {
   const SKIN = '#fcd5b5';
   const HAIR = '#3a1f0a';
@@ -100,6 +122,9 @@ function drawMario(
     const hue = (performance.now() / 30) % 360;
     capColor = `hsl(${hue},90%,55%)`;
     shirtColor = `hsl(${(hue + 180) % 360},90%,55%)`;
+  } else if (fireMode) {
+    capColor = '#dc2626';
+    shirtColor = '#f97316';
   } else if (speedMode) {
     capColor = color;
     shirtColor = '#f97316';
@@ -200,7 +225,6 @@ function drawMario(
 
   // Shoes — alternate when walking
   ctx.fillStyle = SHOE;
-  const shoeOffset = walking && Math.floor(walkPhase) % 2 === 0 ? 2 : 0;
   if (walking) {
     // Walking pose: one foot forward, one back
     if (Math.floor(walkPhase) % 2 === 0) {
@@ -216,11 +240,20 @@ function drawMario(
   }
 
   // Speed mode: motion lines behind
-  if (speedMode) {
+  if (speedMode && !fireMode) {
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.fillRect(-P * 2, 7 * P, P, P / 2);
     ctx.fillRect(-P * 3, 8 * P + P, P * 2, P / 2);
     ctx.fillRect(-P * 2, 9 * P + P, P, P / 2);
+  }
+
+  // Fire mode: flame effect around player
+  if (fireMode) {
+    ctx.globalAlpha = 0.6 + Math.sin(performance.now() / 80) * 0.3;
+    ctx.fillStyle = '#f97316';
+    ctx.fillRect(-P, 7 * P, P, P * 2);
+    ctx.fillRect(9 * P, 7 * P, P, P * 2);
+    ctx.globalAlpha = 1;
   }
 
   ctx.restore();
@@ -272,7 +305,7 @@ function drawGoomba(ctx: CanvasRenderingContext2D, x: number, y: number, squishe
 
 // ── Question block drawing ────────────────────────────────────────────────────
 
-function drawBlock(ctx: CanvasRenderingContext2D, x: number, y: number, hit: boolean) {
+function drawBlock(ctx: CanvasRenderingContext2D, x: number, y: number, hit: boolean, powerUp?: string) {
   if (hit) {
     // Used block — brick texture
     ctx.fillStyle = '#a16207';
@@ -290,18 +323,22 @@ function drawBlock(ctx: CanvasRenderingContext2D, x: number, y: number, hit: boo
     ctx.fillRect(x + BLOCK_SIZE - 7, y + BLOCK_SIZE - 7, 3, 3);
     return;
   }
+
+  // Fire block: orange tinted
+  const isFireBlock = powerUp === 'fire';
+
   // Question block — yellow with ?
   // Outer dark border
-  ctx.fillStyle = '#854d0e';
+  ctx.fillStyle = isFireBlock ? '#7c2d12' : '#854d0e';
   ctx.fillRect(x, y, BLOCK_SIZE, BLOCK_SIZE);
-  // Yellow face
-  ctx.fillStyle = '#fbbf24';
+  // Yellow/orange face
+  ctx.fillStyle = isFireBlock ? '#f97316' : '#fbbf24';
   ctx.fillRect(x + 2, y + 2, BLOCK_SIZE - 4, BLOCK_SIZE - 4);
   // Lighter highlight on top
-  ctx.fillStyle = '#fde68a';
+  ctx.fillStyle = isFireBlock ? '#fdba74' : '#fde68a';
   ctx.fillRect(x + 4, y + 4, BLOCK_SIZE - 8, 4);
   // Darker shadow on bottom
-  ctx.fillStyle = '#d97706';
+  ctx.fillStyle = isFireBlock ? '#ea580c' : '#d97706';
   ctx.fillRect(x + 4, y + BLOCK_SIZE - 8, BLOCK_SIZE - 8, 4);
   // Rivet pixels in corners
   ctx.fillStyle = '#fef3c7';
@@ -309,22 +346,165 @@ function drawBlock(ctx: CanvasRenderingContext2D, x: number, y: number, hit: boo
   ctx.fillRect(x + BLOCK_SIZE - 7, y + 4, 3, 3);
   ctx.fillRect(x + 4, y + BLOCK_SIZE - 7, 3, 3);
   ctx.fillRect(x + BLOCK_SIZE - 7, y + BLOCK_SIZE - 7, 3, 3);
-  // The "?" — drawn as pixels
+
+  if (isFireBlock) {
+    // Draw flame symbol instead of ?
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x + 13, y + 8, 6, 2);
+    ctx.fillRect(x + 11, y + 10, 10, 2);
+    ctx.fillRect(x + 11, y + 12, 4, 6);
+    ctx.fillRect(x + 17, y + 12, 4, 4);
+    ctx.fillRect(x + 13, y + 18, 6, 2);
+    ctx.fillRect(x + 14, y + 24, 4, 3);
+  } else {
+    // The "?" — drawn as pixels
+    ctx.fillStyle = '#fff';
+    // top curve
+    ctx.fillRect(x + 11, y + 8, 10, 3);
+    ctx.fillRect(x + 9, y + 11, 3, 3);
+    ctx.fillRect(x + 20, y + 11, 3, 3);
+    // turn
+    ctx.fillRect(x + 17, y + 14, 6, 3);
+    // descender
+    ctx.fillRect(x + 14, y + 17, 4, 3);
+    // dot
+    ctx.fillRect(x + 14, y + 23, 4, 4);
+    // Outline
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(x + 11, y + 8, 10, 1);
+    ctx.fillRect(x + 14, y + 26, 4, 1);
+  }
+}
+
+// ── Fire Flower drawing ───────────────────────────────────────────────────────
+
+function drawFireFlower(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  const cx = x + 16;
+  const floatOff = Math.sin(performance.now() / 350) * 4;
+  const fy = y - floatOff;
+
+  // Stem
+  ctx.fillStyle = '#16a34a';
+  ctx.fillRect(cx - 2, fy + 18, 4, 14);
+
+  // Leaves
+  ctx.fillStyle = '#22c55e';
+  ctx.fillRect(cx - 8, fy + 20, 8, 5);
+  ctx.fillRect(cx + 2, fy + 24, 8, 5);
+
+  // 4 petals (orange)
+  ctx.fillStyle = '#f97316';
+  ctx.beginPath(); ctx.arc(cx, fy + 10, 6, 0, Math.PI * 2); ctx.fill();  // top
+  ctx.beginPath(); ctx.arc(cx + 9, fy + 16, 6, 0, Math.PI * 2); ctx.fill();  // right
+  ctx.beginPath(); ctx.arc(cx, fy + 22, 6, 0, Math.PI * 2); ctx.fill();  // bottom
+  ctx.beginPath(); ctx.arc(cx - 9, fy + 16, 6, 0, Math.PI * 2); ctx.fill();  // left
+
+  // Inner red petals
+  ctx.fillStyle = '#dc2626';
+  ctx.beginPath(); ctx.arc(cx, fy + 10, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 9, fy + 16, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, fy + 22, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx - 9, fy + 16, 3.5, 0, Math.PI * 2); ctx.fill();
+
+  // Center white
+  ctx.fillStyle = '#fef9c3';
+  ctx.beginPath(); ctx.arc(cx, fy + 16, 5, 0, Math.PI * 2); ctx.fill();
+}
+
+// ── Fireball drawing ──────────────────────────────────────────────────────────
+
+function drawFireball(ctx: CanvasRenderingContext2D, x: number, y: number, now: number) {
+  const flicker = 0.7 + Math.sin(now / 40) * 0.3;
+
+  ctx.save();
+  ctx.shadowBlur = 16;
+  ctx.shadowColor = '#f97316';
+
+  // Outer glow
+  ctx.globalAlpha = 0.4 * flicker;
+  ctx.fillStyle = '#fde68a';
+  ctx.beginPath(); ctx.arc(x, y, 16, 0, Math.PI * 2); ctx.fill();
+
+  // Mid
+  ctx.globalAlpha = 0.7 * flicker;
+  ctx.fillStyle = '#f97316';
+  ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
+
+  // Core
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#fef08a';
+  ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
+
+  ctx.restore();
+}
+
+// ── Piranha Plant drawing ─────────────────────────────────────────────────────
+
+function drawPiranhaPlant(
+  ctx: CanvasRenderingContext2D,
+  x: number, pipeW: number, pipeH: number,
+  visible: boolean, cam: number,
+) {
+  const platY = GROUND_Y - pipeH;
+  const px = x - cam;
+
+  // Pipe body
+  ctx.fillStyle = '#15803d';
+  ctx.fillRect(px, platY, pipeW, pipeH);
+  ctx.fillStyle = '#22c55e';
+  ctx.fillRect(px, platY, 6, pipeH);
+  ctx.fillStyle = '#166534';
+  ctx.fillRect(px + pipeW - 5, platY, 5, pipeH);
+  // Pipe rim
+  ctx.fillStyle = '#16a34a';
+  ctx.fillRect(px - 5, platY, pipeW + 10, 20);
+  ctx.fillStyle = '#22c55e';
+  ctx.fillRect(px - 5, platY, pipeW + 10, 4);
+  ctx.fillStyle = '#166534';
+  ctx.fillRect(px - 5, platY + 16, pipeW + 10, 4);
+
+  if (!visible) return;
+
+  // Stem poking out of top of pipe
+  const stemX = px + pipeW / 2 - 6;
+  const stemY = platY - 30;
+  ctx.fillStyle = '#16a34a';
+  ctx.fillRect(stemX, stemY, 12, 38);
+  ctx.fillStyle = '#22c55e';
+  ctx.fillRect(stemX, stemY, 3, 38);
+
+  // Head (open mouth facing up/right)
+  const hx = px + pipeW / 2;
+  const hy = stemY - 8;
+
+  // Head body — green oval
+  ctx.fillStyle = '#22c55e';
+  ctx.beginPath(); ctx.ellipse(hx, hy, 20, 16, 0, 0, Math.PI * 2); ctx.fill();
+
+  // Inner mouth (red)
+  ctx.fillStyle = '#dc2626';
+  ctx.beginPath();
+  ctx.arc(hx, hy - 4, 14, Math.PI, 0); // top half = open mouth
+  ctx.fill();
+
+  // Lips
+  ctx.fillStyle = '#15803d';
+  ctx.fillRect(hx - 20, hy - 6, 40, 5);
+
+  // Teeth (white)
   ctx.fillStyle = '#fff';
-  // top curve
-  ctx.fillRect(x + 11, y + 8, 10, 3);
-  ctx.fillRect(x + 9, y + 11, 3, 3);
-  ctx.fillRect(x + 20, y + 11, 3, 3);
-  // turn
-  ctx.fillRect(x + 17, y + 14, 6, 3);
-  // descender
-  ctx.fillRect(x + 14, y + 17, 4, 3);
-  // dot
-  ctx.fillRect(x + 14, y + 23, 4, 4);
-  // Outline
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(x + 11, y + 8, 10, 1);
-  ctx.fillRect(x + 14, y + 26, 4, 1);
+  for (let t = 0; t < 4; t++) {
+    ctx.fillRect(hx - 14 + t * 8, hy - 16, 5, 7);
+    ctx.fillRect(hx - 10 + t * 8, hy - 4, 5, 6);
+  }
+
+  // Eyes (white circles with black pupils)
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(hx - 10, hy + 4, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(hx + 10, hy + 4, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#0a1a2f';
+  ctx.beginPath(); ctx.arc(hx - 9, hy + 4, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(hx + 11, hy + 4, 2.5, 0, Math.PI * 2); ctx.fill();
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -339,18 +519,22 @@ export default function MarioGame() {
     powerUp: null, powerUpExpiry: 0,
     finished: false, dead: false, respawnAt: 0, jumpPressed: false,
     walkPhase: 0,
+    slowed: false, slowUntil: 0,
+    fireballCooldown: 0,
   });
 
   const remotePlayers = useRef<Map<string, RemotePlayer & { lastX?: number }>>(new Map());
   const goombasRef = useRef<GoombaClient[]>([]);
   const blocksRef = useRef<BlockClient[]>(QUESTION_BLOCKS.map(b => ({ ...b, hit: false, bounceAt: 0 })));
   const powerUpsRef = useRef<PowerUpClient[]>([]);
+  const fireballsRef = useRef<Fireball[]>([]);
   const camRef = useRef({ x: 0 });
-  const inputRef = useRef({ left: false, right: false, jump: false });
+  const inputRef = useRef({ left: false, right: false, jump: false, fire: false, firePrev: false });
   const lastSendRef = useRef(0);
   const animRef = useRef(0);
   const lastTimeRef = useRef(0);
   const finishedMsgRef = useRef('');
+  const fireballIdRef = useRef(0);
 
   // ── Server state sync ──────────────────────────────────────────────────────
 
@@ -415,12 +599,21 @@ export default function MarioGame() {
         p.vx = 0; p.vy = 0;
       }
     };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const onSlow = (data: any) => {
+      if (data.targetId === myId) {
+        const p = playerRef.current;
+        p.slowed = true;
+        p.slowUntil = performance.now() + 3000;
+      }
+    };
 
     socket.on('mario:state', onState);
     socket.on('mario:block_hit', onBlockHit);
     socket.on('mario:goomba_stomped', onStomp);
     socket.on('mario:player_finished', onFinish);
     socket.on('mario:player_hit', onHit);
+    socket.on('mario:player_slow', onSlow);
 
     return () => {
       socket.off('mario:state', onState);
@@ -428,6 +621,7 @@ export default function MarioGame() {
       socket.off('mario:goomba_stomped', onStomp);
       socket.off('mario:player_finished', onFinish);
       socket.off('mario:player_hit', onHit);
+      socket.off('mario:player_slow', onSlow);
     };
   }, []);
 
@@ -441,11 +635,13 @@ export default function MarioGame() {
         if (!e.repeat) inputRef.current.jump = true;
         e.preventDefault();
       }
+      if (e.key === 'f' || e.key === 'F') inputRef.current.fire = true;
     };
     const up = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') inputRef.current.left = false;
       if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') inputRef.current.right = false;
       if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === ' ') inputRef.current.jump = false;
+      if (e.key === 'f' || e.key === 'F') inputRef.current.fire = false;
     };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
@@ -466,10 +662,13 @@ export default function MarioGame() {
     }
     if (p.finished) return;
 
-    // Power-up expiry
-    if (p.powerUp && now > p.powerUpExpiry) p.powerUp = null;
+    // Power-up expiry (fire doesn't expire on time, consumed on throw)
+    if (p.powerUp && p.powerUp !== 'fire' && now > p.powerUpExpiry) p.powerUp = null;
 
-    const speed = WALK_SPEED * (p.powerUp === 'speed' ? SPEED_MULT : 1);
+    // Slow effect expiry
+    if (p.slowed && now > p.slowUntil) p.slowed = false;
+
+    const speed = WALK_SPEED * (p.powerUp === 'speed' ? SPEED_MULT : 1) * (p.slowed && now < p.slowUntil ? 0.45 : 1);
 
     if (inp.left) { p.vx = -speed; p.facing = -1; }
     else if (inp.right) { p.vx = speed; p.facing = 1; }
@@ -484,6 +683,26 @@ export default function MarioGame() {
       p.onGround = false;
     }
     p.jumpPressed = inp.jump;
+
+    // Fire flower throw (F key)
+    if (inp.fire && !inp.firePrev && p.powerUp === 'fire' && p.fireballCooldown < now) {
+      // Spawn fireball
+      const fb: Fireball = {
+        id: fireballIdRef.current++,
+        x: p.x + PLAYER_W / 2,
+        y: p.y + PLAYER_H / 2,
+        vx: p.facing * 500,
+        vy: -200,
+        spawnedAt: now,
+        bounced: false,
+        bounceCount: 0,
+      };
+      fireballsRef.current.push(fb);
+      // Consume fire powerup
+      p.powerUp = null;
+      p.fireballCooldown = now + 500;
+    }
+    inp.firePrev = inp.fire;
 
     // Gravity
     p.vy += GRAVITY * dt;
@@ -578,6 +797,58 @@ export default function MarioGame() {
       return true;
     });
 
+    // ── Fireball physics ──
+    fireballsRef.current = fireballsRef.current.filter(fb => {
+      // Remove after 2.5s or if bounced twice
+      if (now - fb.spawnedAt > 2500 || fb.bounceCount >= 2) return false;
+
+      fb.x += fb.vx * dt;
+      fb.vy += GRAVITY * dt;
+      fb.y += fb.vy * dt;
+
+      // Bounce off ground
+      if (fb.y >= GROUND_Y - 8 && !fb.bounced) {
+        fb.vy *= -0.6;
+        fb.y = GROUND_Y - 8;
+        fb.bounced = true;
+        fb.bounceCount++;
+      } else if (fb.y >= GROUND_Y - 8 && fb.bounced) {
+        fb.bounceCount++;
+      }
+
+      // Check fireball vs remote players
+      for (const [id, rp] of remotePlayers.current) {
+        if (rp.dead || rp.finished) continue;
+        const dx = Math.abs(fb.x - (rp.x + PLAYER_W / 2));
+        const dy = Math.abs(fb.y - (rp.y + PLAYER_H / 2));
+        if (dx < 40 && dy < 60) {
+          sendInput('fire_hit', { targetId: id });
+          return false; // remove fireball on hit
+        }
+      }
+
+      return true;
+    });
+
+    // ── Piranha Plant collision ──
+    for (const pipe of PIRANHA_PIPES) {
+      const pipeH = pipe.pipeH;
+      const platY = GROUND_Y - pipeH;
+      // Piranha is up when sin > 0
+      const up = Math.sin(now / 1500) > 0;
+      if (up) {
+        // Plant box (head area)
+        const plantBox = { x: pipe.x + 10, y: platY - 48, w: pipe.pipeW - 20, h: 48 };
+        const inX = p.x + PLAYER_W > plantBox.x && p.x < plantBox.x + plantBox.w;
+        const inY = p.y + PLAYER_H > plantBox.y && p.y < plantBox.y + plantBox.h;
+        if (inX && inY && !p.dead) {
+          p.dead = true;
+          p.respawnAt = now + 2500;
+          p.vy = -350;
+        }
+      }
+    }
+
     // ── Goombas ──
     for (const g of goombasRef.current) {
       if (!g.alive) continue;
@@ -660,15 +931,35 @@ export default function MarioGame() {
     const now = performance.now();
     const p = playerRef.current;
 
-    // Sky
+    // Sky — Star Road section has a slightly different sky tint
+    const starRoadFactor = Math.min(1, Math.max(0, (p.x - 4600) / 400));
     const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-    grad.addColorStop(0, '#5b9bd5');
-    grad.addColorStop(1, '#9ed0f5');
+    if (starRoadFactor > 0.5) {
+      // Purple star road sky
+      grad.addColorStop(0, '#2d1b69');
+      grad.addColorStop(1, '#7c3aed');
+    } else {
+      grad.addColorStop(0, '#5b9bd5');
+      grad.addColorStop(1, '#9ed0f5');
+    }
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
+    // Star Road: draw stars in background
+    if (starRoadFactor > 0.3) {
+      ctx.globalAlpha = starRoadFactor * 0.8;
+      ctx.fillStyle = '#fff';
+      for (let i = 0; i < 30; i++) {
+        const sx = ((i * 137 + 50 - cam * 0.05) % CANVAS_W + CANVAS_W) % CANVAS_W;
+        const sy = ((i * 89 + 20) % 200);
+        const size = 1 + (i % 3);
+        ctx.fillRect(sx, sy, size, size);
+      }
+      ctx.globalAlpha = 1;
+    }
+
     // Background hills (parallax)
-    ctx.fillStyle = 'rgba(34,139,80,0.45)';
+    ctx.fillStyle = starRoadFactor > 0.5 ? 'rgba(109,40,217,0.35)' : 'rgba(34,139,80,0.45)';
     for (let i = 0; i < 12; i++) {
       const hx = ((i * 500 - cam * 0.25) % 2400 + 2400) % 2400 - 200;
       ctx.beginPath();
@@ -677,7 +968,7 @@ export default function MarioGame() {
     }
 
     // Clouds
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = starRoadFactor > 0.5 ? 'rgba(167,139,250,0.7)' : '#fff';
     const clouds = [{ x: 150, y: 90 }, { x: 700, y: 60 }, { x: 1200, y: 110 }, { x: 1700, y: 70 }, { x: 2300, y: 90 }];
     for (const c of clouds) {
       const cx = ((c.x - cam * 0.15) % 2200 + 2200) % 2200 - 100;
@@ -687,10 +978,10 @@ export default function MarioGame() {
     }
 
     // Ground
-    // Grass top stripe
-    ctx.fillStyle = '#5fc34a';
+    // Grass top stripe — purple in star road
+    ctx.fillStyle = starRoadFactor > 0.5 ? '#7c3aed' : '#5fc34a';
     ctx.fillRect(-cam, GROUND_Y, LEVEL_WIDTH, 16);
-    ctx.fillStyle = '#3f9c2b';
+    ctx.fillStyle = starRoadFactor > 0.5 ? '#6d28d9' : '#3f9c2b';
     ctx.fillRect(-cam, GROUND_Y + 14, LEVEL_WIDTH, 4);
     // Dirt
     ctx.fillStyle = '#c97e2c';
@@ -712,11 +1003,13 @@ export default function MarioGame() {
     for (const plat of PLATFORMS) {
       const px = plat.x - cam;
       if (px + plat.w < -20 || px > CANVAS_W + 20) continue;
-      ctx.fillStyle = '#8b4513';
+      // Star Road platforms: slightly purple tinted
+      const isStarRoad = plat.x >= 4700;
+      ctx.fillStyle = isStarRoad ? '#5b21b6' : '#8b4513';
       ctx.fillRect(px, plat.y, plat.w, plat.h);
-      ctx.fillStyle = '#a0623c';
+      ctx.fillStyle = isStarRoad ? '#7c3aed' : '#a0623c';
       ctx.fillRect(px, plat.y, plat.w, 3);
-      ctx.fillStyle = '#6b3410';
+      ctx.fillStyle = isStarRoad ? '#4c1d95' : '#6b3410';
       ctx.fillRect(px, plat.y + plat.h - 3, plat.w, 3);
       // Brick lines
       ctx.strokeStyle = 'rgba(0,0,0,0.25)';
@@ -740,7 +1033,7 @@ export default function MarioGame() {
       const bounce = block.bounceAt > 0 && now - block.bounceAt < 300
         ? -Math.sin(((now - block.bounceAt) / 300) * Math.PI) * 10
         : 0;
-      drawBlock(ctx, bx, block.y + bounce, block.hit);
+      drawBlock(ctx, bx, block.y + bounce, block.hit, block.powerUp ?? undefined);
     }
 
     // Power-ups
@@ -748,7 +1041,10 @@ export default function MarioGame() {
       const px = pu.x - cam;
       if (px < -40 || px > CANVAS_W + 40) continue;
       const floatY = pu.y - Math.sin(now / 350) * 4;
-      if (pu.type === 'speed') {
+      if (pu.type === 'fire') {
+        // Fire flower
+        drawFireFlower(ctx, px, floatY);
+      } else if (pu.type === 'speed') {
         // Mushroom
         ctx.fillStyle = '#dc2626';
         ctx.fillRect(px + 4, floatY + 2, 24, 14);
@@ -783,6 +1079,14 @@ export default function MarioGame() {
       }
     }
 
+    // Piranha plants
+    for (const pipe of PIRANHA_PIPES) {
+      const pipeX = pipe.x - cam;
+      if (pipeX + pipe.pipeW < -100 || pipeX > CANVAS_W + 100) continue;
+      const visible = Math.sin(now / 1500) > 0;
+      drawPiranhaPlant(ctx, pipe.x, pipe.pipeW, pipe.pipeH, visible, cam);
+    }
+
     // End pipe
     const pipeX = PIPE.x - cam;
     if (pipeX < CANVAS_W + 120 && pipeX > -PIPE.w - 20) {
@@ -815,6 +1119,13 @@ export default function MarioGame() {
       drawGoomba(ctx, gx, g.y, squished);
     }
 
+    // Fireballs
+    for (const fb of fireballsRef.current) {
+      const fbx = fb.x - cam;
+      if (fbx < -30 || fbx > CANVAS_W + 30) continue;
+      drawFireball(ctx, fbx, fb.y, now);
+    }
+
     // Remote players
     const room = useGameStore.getState().room;
     for (const [id, rp] of remotePlayers.current) {
@@ -825,7 +1136,20 @@ export default function MarioGame() {
       if (!pl) continue;
       const facing = (rp.facing as 1 | -1) ?? 1;
       const walking = rp.lastX !== undefined && Math.abs(rp.x - (rp.lastX ?? rp.x)) > 0.5;
-      drawMario(ctx, rpx, rp.y, pl.color, facing, walking, now / 100, rp.powerUp === 'star', rp.powerUp === 'speed');
+      drawMario(ctx, rpx, rp.y, pl.color, facing, walking, now / 100, rp.powerUp === 'star', rp.powerUp === 'speed', false, rp.powerUp === 'fire');
+
+      // Slowed: blue sparkle overlay
+      if (rp.slowed) {
+        ctx.globalAlpha = 0.4 + Math.sin(now / 150) * 0.2;
+        ctx.fillStyle = '#93c5fd';
+        ctx.fillRect(rpx - 2, rp.y - 2, PLAYER_W + 4, PLAYER_H + 4);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#3b82f6';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('❄️', rpx + PLAYER_W / 2, rp.y - 4);
+        ctx.textAlign = 'left';
+      }
 
       // Name above
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -852,7 +1176,15 @@ export default function MarioGame() {
       const lx = p.x - cam;
       const walking = Math.abs(p.vx) > 5 && p.onGround;
 
-      drawMario(ctx, lx, p.y, color, p.facing, walking, p.walkPhase, p.powerUp === 'star', p.powerUp === 'speed');
+      // Slow: ice blue overlay
+      if (p.slowed && now < p.slowUntil) {
+        ctx.globalAlpha = 0.35 + Math.sin(now / 120) * 0.15;
+        ctx.fillStyle = '#bfdbfe';
+        ctx.fillRect(lx - 2, p.y - 2, PLAYER_W + 4, PLAYER_H + 4);
+        ctx.globalAlpha = 1;
+      }
+
+      drawMario(ctx, lx, p.y, color, p.facing, walking, p.walkPhase, p.powerUp === 'star', p.powerUp === 'speed', false, p.powerUp === 'fire');
 
       // YOU label
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -876,17 +1208,33 @@ export default function MarioGame() {
     if (p.powerUp) {
       const remaining = Math.max(0, (p.powerUpExpiry - now) / 1000);
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(10, 10, 160, 36);
+      ctx.fillRect(10, 10, 200, 36);
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 14px sans-serif';
-      ctx.fillText(`${p.powerUp === 'star' ? '⭐ STAR' : '🍄 SPEED'}  ${remaining.toFixed(1)}s`, 18, 33);
+      if (p.powerUp === 'star') {
+        ctx.fillText(`⭐ STAR  ${remaining.toFixed(1)}s`, 18, 33);
+      } else if (p.powerUp === 'speed') {
+        ctx.fillText(`🍄 SPEED  ${remaining.toFixed(1)}s`, 18, 33);
+      } else if (p.powerUp === 'fire') {
+        ctx.fillText('🔥 FIRE FLOWER  [F] to throw', 18, 33);
+      }
+    }
+
+    // HUD slow indicator
+    if (p.slowed && now < p.slowUntil) {
+      const slowRemaining = ((p.slowUntil - now) / 1000).toFixed(1);
+      ctx.fillStyle = 'rgba(59,130,246,0.7)';
+      ctx.fillRect(10, 52, 150, 28);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillText(`❄️ SLOWED  ${slowRemaining}s`, 18, 71);
     }
 
     // Progress bar
     const progress = Math.min(1, p.x / (PIPE.x - 100));
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(CANVAS_W / 2 - 160, CANVAS_H - 28, 320, 14);
-    ctx.fillStyle = p.powerUp === 'star' ? '#fde047' : '#7c3aed';
+    ctx.fillStyle = p.powerUp === 'star' ? '#fde047' : p.powerUp === 'fire' ? '#f97316' : '#7c3aed';
     ctx.fillRect(CANVAS_W / 2 - 158, CANVAS_H - 26, 316 * progress, 10);
     ctx.font = '11px serif';
     ctx.fillStyle = '#fff';
@@ -921,7 +1269,7 @@ export default function MarioGame() {
   return (
     <div className="flex flex-col items-center gap-2">
       <div className="text-white/60 text-xs text-center mb-1 px-2">
-        Arrows / WASD to move • Space / Up to jump • Stomp Goombas from above • Jump UP into yellow ? blocks
+        Arrows / WASD to move • Space / Up to jump • Stomp Goombas from above • Jump UP into ? blocks • [F] throw fireball
       </div>
 
       <canvas
@@ -954,6 +1302,12 @@ export default function MarioGame() {
           onPointerUp={() => { inputRef.current.jump = false; }}
           onPointerCancel={() => { inputRef.current.jump = false; }}
         >JUMP</button>
+        <button
+          className="w-14 h-14 rounded-xl bg-orange-500/40 border border-orange-500/60 text-white font-bold text-lg flex items-center justify-center active:bg-orange-500/60"
+          onPointerDown={() => { inputRef.current.fire = true; }}
+          onPointerUp={() => { inputRef.current.fire = false; }}
+          onPointerCancel={() => { inputRef.current.fire = false; }}
+        >🔥</button>
       </div>
     </div>
   );

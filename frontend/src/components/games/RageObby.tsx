@@ -8,12 +8,12 @@ import { useSocketActions, getSocket } from '@/hooks/useSocket';
 
 const CW = 900;   // canvas width
 const CH = 500;   // canvas height
-const WW = 6200;  // world width
+const WW = 9200;  // world width
 const PW = 24;    // player width
 const PH = 36;    // player height
 const GY = 420;   // top of standard ground platforms
 const KILL_Y = CH + 80;
-const FINISH_X = 5860;
+const FINISH_X = 8800;
 
 const GRAVITY   = 1500;
 const JUMP_VEL  = -730;
@@ -25,12 +25,13 @@ const COYOTE_MS = 110;
 
 interface Plat {
   x: number; y: number; w: number; h: number;
-  type: 'static' | 'moving';
+  type: 'static' | 'moving' | 'crumble' | 'bounce' | 'ice';
   cx?: number; amp?: number; spd?: number; axis?: 'x' | 'y';
   color?: string;
 }
 interface Spike  { x: number; y: number; w: number; h: number }
 interface CPDef  { id: number; trigX: number; spawnX: number; spawnY: number }
+interface Saw    { x: number; y: number; r: number }
 
 const PLATS: Plat[] = [
   // ── Start island ──
@@ -70,6 +71,29 @@ const PLATS: Plat[] = [
   { x:0,    y:GY-130,  w:70,  h:18,  type:'moving', cx:4920, amp:78,  spd:0.65, axis:'x', color:'#15803d' },
   { x:5160, y:GY,      w:700, h:80,  type:'static', color:'#78350f' },  // final gauntlet
 
+  // ── CP5 bridge island ──
+  { x:6200, y:GY, w:120, h:80, type:'static', color:'#78350f' },
+
+  // ── Section 6: Crumble Gauntlet ──
+  { x:6400, y:GY,     w:65, h:18, type:'crumble', color:'#b45309' },
+  { x:6535, y:GY-50,  w:65, h:18, type:'crumble', color:'#b45309' },
+  { x:6670, y:GY,     w:65, h:18, type:'crumble', color:'#b45309' },
+  { x:6805, y:GY-80,  w:65, h:18, type:'crumble', color:'#b45309' },
+  { x:6940, y:GY,     w:65, h:18, type:'crumble', color:'#b45309' },
+  { x:7075, y:GY,     w:100, h:80, type:'static', color:'#78350f' },
+
+  // ── Section 7: Bounce Canyon ──
+  { x:7240, y:GY,  w:55, h:14, type:'bounce', color:'#22c55e' },
+  { x:7440, y:50,  w:120, h:18, type:'static', color:'#78350f' },
+  { x:7630, y:50,  w:55,  h:14, type:'bounce', color:'#22c55e' },
+  { x:7820, y:GY,  w:120, h:80, type:'static', color:'#78350f' },
+
+  // ── Section 8: Ice Sprint ──
+  { x:8010, y:GY, w:200, h:18, type:'ice', color:'#bae6fd' },
+  { x:8280, y:GY, w:160, h:18, type:'ice', color:'#bae6fd' },
+  { x:8510, y:GY, w:140, h:18, type:'ice', color:'#bae6fd' },
+  { x:8710, y:GY, w:100, h:18, type:'ice', color:'#bae6fd' },
+
   // ── Finish ──
   { x:FINISH_X, y:GY, w:340, h:80, type:'static', color:'#854d0e' },
 ];
@@ -95,6 +119,19 @@ const SPIKES: Spike[] = [
   { x:5540, y:GY-14, w:24, h:14 }, { x:5588, y:GY-14, w:24, h:14 },
   { x:5655, y:GY-14, w:24, h:14 }, { x:5705, y:GY-14, w:24, h:14 },
   { x:5770, y:GY-14, w:24, h:14 }, { x:5820, y:GY-14, w:24, h:14 },
+
+  // Ice section - spikes on ice surfaces (punish sliding)
+  { x:8060, y:GY-14, w:24, h:14 },
+  { x:8160, y:GY-14, w:24, h:14 },
+  { x:8310, y:GY-14, w:24, h:14 },
+  { x:8400, y:GY-14, w:24, h:14 },
+  { x:8560, y:GY-14, w:24, h:14 },
+  { x:8640, y:GY-14, w:24, h:14 },
+];
+
+const SAWS: Saw[] = [
+  { x: 6800, y: GY - 30, r: 22 },  // in crumble section gap
+  { x: 7150, y: GY - 30, r: 22 },  // before safe island
 ];
 
 const CPS: CPDef[] = [
@@ -103,6 +140,8 @@ const CPS: CPDef[] = [
   { id:2, trigX:2220, spawnX:2240, spawnY:GY-PH },
   { id:3, trigX:3230, spawnX:3250, spawnY:GY-PH },
   { id:4, trigX:4250, spawnX:4270, spawnY:GY-PH },
+  { id:5, trigX:6100, spawnX:6120, spawnY:GY-PH },
+  { id:6, trigX:7800, spawnX:7820, spawnY:GY-PH },
 ];
 
 // ── Physics helpers ──────────────────────────────────────────────────────────────
@@ -131,6 +170,7 @@ interface PhysState {
 interface Ghost { x: number; y: number; cp: number }
 
 interface ResolvedPlat { x: number; y: number; w: number; h: number; idx: number; ref: Plat }
+interface CrumbleState { stoodSince: number; broken: boolean; respawnAt: number }
 
 // ── Component ────────────────────────────────────────────────────────────────────
 
@@ -145,6 +185,7 @@ export default function RageObby() {
   const inputRef   = useRef({ left:false, right:false, jump:false, jumpPrev:false });
   const ghostsRef  = useRef<Map<string, Ghost>>(new Map());
   const stoodRef   = useRef<{ idx: number; prevX: number } | null>(null);
+  const crumbleMapRef = useRef<Map<number, CrumbleState>>(new Map());
   const animRef    = useRef(0);
   const sendRef    = useRef(0);
   const { sendInput } = useSocketActions();
@@ -185,6 +226,7 @@ export default function RageObby() {
       onGround:true, jumpsLeft:1, coyoteMs:0,
       checkpoint:0, deaths:0, finished:false, facing:1 as const, flashMs:0,
     });
+    crumbleMapRef.current.clear();
 
     const loop = (ts: number) => {
       const dt = Math.min((ts - lastTs) / 1000, 0.05);
@@ -213,7 +255,12 @@ export default function RageObby() {
       const jumpJust = inp.jump && !inp.jumpPrev;
       inp.jumpPrev = inp.jump;
       const tgtVx = inp.left ? -WALK_SPD : inp.right ? WALK_SPD : 0;
-      s.vx += (tgtVx - s.vx) * Math.min(1, (s.onGround ? 20 : 7) * dt);
+
+      // Determine current platform type for friction
+      const standingPlatType = stoodRef.current ? (PLATS[stoodRef.current.idx]?.type ?? 'static') : 'static';
+      const groundFriction = standingPlatType === 'ice' ? 2.5 : 20;
+      s.vx += (tgtVx - s.vx) * Math.min(1, (s.onGround ? groundFriction : 7) * dt);
+
       if (inp.right) s.facing = 1;
       if (inp.left)  s.facing = -1;
 
@@ -228,7 +275,7 @@ export default function RageObby() {
         if (s.onGround || s.coyoteMs > 0) {
           s.vy = JUMP_VEL; s.onGround = false; s.coyoteMs = 0; s.jumpsLeft = 1;
         } else if (s.jumpsLeft > 0) {
-          s.vy = JUMP_VEL * 0.82; s.jumpsLeft = 0;
+          s.vy = JUMP_VEL * 0.60; s.jumpsLeft = 0;
         }
       }
 
@@ -236,6 +283,10 @@ export default function RageObby() {
       const prevX = s.x;
       s.x = Math.max(0, s.x + s.vx * dt);
       for (const p of pp) {
+        // Skip broken crumble platforms
+        const cm = crumbleMapRef.current.get(p.idx);
+        if (p.ref.type === 'crumble' && cm?.broken) continue;
+
         if (!aabb(s.x, s.y, PW, PH, p.x, p.y, p.w, p.h)) continue;
         if (prevX + PW <= p.x + 6 && s.vx >= 0)  { s.x = p.x - PW; s.vx = 0; }
         else if (prevX >= p.x + p.w - 6 && s.vx <= 0) { s.x = p.x + p.w; s.vx = 0; }
@@ -249,6 +300,10 @@ export default function RageObby() {
       stoodRef.current = null;
 
       for (const p of pp) {
+        // Skip broken crumble platforms
+        const cm = crumbleMapRef.current.get(p.idx);
+        if (p.ref.type === 'crumble' && cm?.broken) continue;
+
         if (!aabb(s.x, s.y, PW, PH, p.x, p.y, p.w, p.h)) continue;
         if (prevY + PH <= p.y + 10 && s.vy >= 0) {
           // Land on top
@@ -256,9 +311,42 @@ export default function RageObby() {
           if (!wasGround) s.jumpsLeft = 1;
           s.coyoteMs = COYOTE_MS;
           stoodRef.current = { idx: p.idx, prevX: p.x };
+
+          // Bounce pad: launch player upward
+          if (p.ref.type === 'bounce') {
+            s.vy = JUMP_VEL * 1.4;
+            s.onGround = false;
+            s.jumpsLeft = 2; // reset double jump
+            stoodRef.current = null;
+          } else if (p.ref.type === 'crumble') {
+            // Start crumble timer if not already started
+            if (!crumbleMapRef.current.has(p.idx)) {
+              crumbleMapRef.current.set(p.idx, { stoodSince: ts, broken: false, respawnAt: 0 });
+            }
+          }
         } else if (prevY >= p.y + p.h - 10 && s.vy < 0) {
           // Ceiling
           s.y = p.y + p.h; s.vy = 0;
+        }
+      }
+
+      // ── Crumble platform update ──
+      for (const [idx, cm] of crumbleMapRef.current) {
+        if (!cm.broken) {
+          if (stoodRef.current?.idx === idx) {
+            // Player is standing on this crumble platform
+            if (ts - cm.stoodSince > 1200) {
+              cm.broken = true;
+              cm.respawnAt = ts + 5000;
+              s.onGround = false;
+              stoodRef.current = null;
+            }
+          } else {
+            // Player left the platform — reset timer
+            crumbleMapRef.current.delete(idx);
+          }
+        } else if (ts > cm.respawnAt) {
+          crumbleMapRef.current.delete(idx);
         }
       }
 
@@ -267,6 +355,14 @@ export default function RageObby() {
       if (!died) {
         for (const sp of SPIKES) {
           if (aabb(s.x + 3, s.y + 3, PW - 6, PH - 6, sp.x, sp.y, sp.w, sp.h)) { died = true; break; }
+        }
+      }
+      // ── Saw collision ──
+      if (!died) {
+        for (const saw of SAWS) {
+          const sdx = (s.x + PW / 2) - saw.x;
+          const sdy = (s.y + PH / 2) - saw.y;
+          if (Math.sqrt(sdx * sdx + sdy * sdy) < saw.r + Math.max(PW, PH) / 2 - 4) { died = true; break; }
         }
       }
       if (died) {
@@ -301,7 +397,7 @@ export default function RageObby() {
       }
 
       // ── Render ──
-      render(ctx, s, pp, t, ghostsRef.current);
+      render(ctx, s, pp, t, ghostsRef.current, crumbleMapRef.current, ts);
 
       animRef.current = requestAnimationFrame(loop);
     };
@@ -334,7 +430,7 @@ export default function RageObby() {
   return (
     <div className="flex flex-col items-center gap-2">
       <div className="text-white/60 text-xs text-center mb-1">
-        A / D or ← → to move &nbsp;•&nbsp; Space / W / ↑ to jump &nbsp;•&nbsp; Double jump in the air!
+        A / D or ← → to move &nbsp;•&nbsp; Space / W / ↑ to jump &nbsp;•&nbsp; Double jump in the air! &nbsp;•&nbsp; Brown = crumbles • Green = bounce • Blue = slippery
       </div>
       <canvas
         ref={canvasRef}
@@ -374,6 +470,8 @@ function render(
   pp: ResolvedPlat[],
   _t: number,
   ghosts: Map<string, Ghost>,
+  crumbles: Map<number, CrumbleState>,
+  ts: number,
 ) {
   const room       = useGameStore.getState().room;
   const mySocketId = getSocket().id;
@@ -405,23 +503,146 @@ function render(
   // ── Platforms ──
   for (const p of pp) {
     if (p.x + p.w < camX - 10 || p.x > camX + CW + 10) continue;
+
+    const cm = crumbles.get(p.idx);
+    // Skip drawing broken crumble platforms
+    if (p.ref.type === 'crumble' && cm?.broken) continue;
+
+    // Crumble shake offset
+    let shakeX = 0;
+    let shakeY = 0;
+    if (p.ref.type === 'crumble' && cm && !cm.broken) {
+      const elapsed = ts - cm.stoodSince;
+      if (elapsed > 800) {
+        // Shaking phase
+        shakeX = (Math.random() * 4 - 2);
+        shakeY = (Math.random() * 2 - 1);
+      }
+    }
+
+    const drawX = p.x + shakeX;
+    const drawY = p.y + shakeY;
+
     // Drop shadow
     ctx.fillStyle = 'rgba(0,0,0,0.22)';
-    ctx.fillRect(p.x + 3, p.y + 4, p.w, p.h);
-    // Body
-    ctx.fillStyle = p.ref.color ?? '#78350f';
-    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.fillRect(drawX + 3, drawY + 4, p.w, p.h);
+
+    // Body color
+    if (p.ref.type === 'crumble') {
+      ctx.fillStyle = p.ref.color ?? '#b45309';
+    } else if (p.ref.type === 'bounce') {
+      ctx.fillStyle = '#16a34a';
+    } else if (p.ref.type === 'ice') {
+      ctx.fillStyle = '#7dd3fc';
+    } else {
+      ctx.fillStyle = p.ref.color ?? '#78350f';
+    }
+    ctx.fillRect(drawX, drawY, p.w, p.h);
+
     // Top surface
-    ctx.fillStyle = p.ref.type === 'moving' ? '#4ade80' :
-                    p.ref.color === '#854d0e' ? '#fbbf24' : '#a16207';
-    ctx.fillRect(p.x, p.y, p.w, Math.min(7, p.h));
+    if (p.ref.type === 'crumble') {
+      ctx.fillStyle = '#d97706';
+    } else if (p.ref.type === 'bounce') {
+      ctx.fillStyle = '#4ade80';
+    } else if (p.ref.type === 'ice') {
+      ctx.fillStyle = '#e0f2fe';
+    } else {
+      ctx.fillStyle = p.ref.type === 'moving' ? '#4ade80' :
+                      p.ref.color === '#854d0e' ? '#fbbf24' : '#a16207';
+    }
+    ctx.fillRect(drawX, drawY, p.w, Math.min(7, p.h));
+
+    // Type-specific decorations
+    if (p.ref.type === 'crumble') {
+      // Crack lines
+      ctx.strokeStyle = '#92400e';
+      ctx.lineWidth = 1.5;
+      const cm2 = crumbles.get(p.idx);
+      const crackCount = cm2 ? Math.floor((ts - cm2.stoodSince) / 200) + 1 : 1;
+      for (let c = 0; c < Math.min(crackCount, 5); c++) {
+        const cx2 = drawX + (c * 0.2 + 0.1) * p.w;
+        ctx.beginPath();
+        ctx.moveTo(cx2, drawY + 2);
+        ctx.lineTo(cx2 + (c % 2 === 0 ? 6 : -6), drawY + p.h * 0.6);
+        ctx.lineTo(cx2 + (c % 2 === 0 ? -3 : 3), drawY + p.h);
+        ctx.stroke();
+      }
+    } else if (p.ref.type === 'bounce') {
+      // Upward arrows
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('▲', drawX + p.w / 3, drawY + p.h * 0.7);
+      ctx.fillText('▲', drawX + (p.w * 2) / 3, drawY + p.h * 0.7);
+      ctx.textAlign = 'left';
+    } else if (p.ref.type === 'ice') {
+      // Ice crystal overlay
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = '#f0f9ff';
+      ctx.fillRect(drawX + 2, drawY + 2, p.w - 4, p.h - 4);
+      ctx.globalAlpha = 1;
+      // Snowflake symbols
+      ctx.fillStyle = '#e0f2fe';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      const flakeCount = Math.floor(p.w / 40);
+      for (let f = 0; f <= flakeCount; f++) {
+        ctx.fillText('❄', drawX + (f + 0.5) * (p.w / (flakeCount + 1)), drawY + p.h * 0.6);
+      }
+      ctx.textAlign = 'left';
+    }
+
     // Finish label
     if (p.ref.color === '#854d0e') {
       ctx.fillStyle = '#fbbf24';
       ctx.font = 'bold 20px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('🏁 FINISH!', p.x + p.w / 2, p.y - 12);
+      ctx.fillText('🏁 FINISH!', drawX + p.w / 2, drawY - 12);
+      ctx.textAlign = 'left';
     }
+  }
+
+  // ── Saws ──
+  for (const saw of SAWS) {
+    if (saw.x + saw.r < camX - 10 || saw.x - saw.r > camX + CW + 10) continue;
+    const rotation = (ts / 1000) * 2; // radians per second
+    ctx.save();
+    ctx.translate(saw.x, saw.y);
+    ctx.rotate(rotation);
+
+    // Saw body
+    ctx.fillStyle = '#9ca3af';
+    ctx.beginPath();
+    ctx.arc(0, 0, saw.r * 0.75, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Teeth
+    ctx.fillStyle = '#d1d5db';
+    const teeth = 10;
+    for (let i = 0; i < teeth; i++) {
+      const angle = (i / teeth) * Math.PI * 2;
+      const innerR = saw.r * 0.72;
+      const outerR = saw.r;
+      const halfAngle = Math.PI / teeth;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(angle - halfAngle * 0.5) * innerR, Math.sin(angle - halfAngle * 0.5) * innerR);
+      ctx.lineTo(Math.cos(angle) * outerR, Math.sin(angle) * outerR);
+      ctx.lineTo(Math.cos(angle + halfAngle * 0.5) * innerR, Math.sin(angle + halfAngle * 0.5) * innerR);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Center bolt
+    ctx.fillStyle = '#6b7280';
+    ctx.beginPath();
+    ctx.arc(0, 0, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#374151';
+    ctx.beginPath();
+    ctx.arc(0, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
   }
 
   // ── Spikes ──
@@ -459,6 +680,7 @@ function render(
     ctx.font = 'bold 10px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(String(cp.id), fx + 11, GY - 47);
+    ctx.textAlign = 'left';
   }
 
   // ── Ghost players ──
