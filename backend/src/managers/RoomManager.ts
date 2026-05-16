@@ -10,7 +10,7 @@ const DEFAULT_CONFIG: RoomConfig = {
   roundDuration: 60,
 };
 
-const GAME_POOL: GameType[] = ['speed-typing', 'fake-trivia', 'mario-race'];
+const GAME_POOL: GameType[] = ['speed-typing', 'fake-trivia', 'mario-race', 'knockback-arena'];
 
 function buildPlaylist(count: number): GameType[] {
   const shuffled = [...GAME_POOL].sort(() => Math.random() - 0.5);

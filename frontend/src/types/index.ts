@@ -53,6 +53,7 @@ export type GameType =
   | 'speed-typing'
   | 'fake-trivia'
   | 'mario-race'
+  | 'knockback-arena'
   | 'drawing'
   | 'physics-soccer'
   | 'ai-image-guess'

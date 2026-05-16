@@ -5,6 +5,7 @@ import { BaseGame, GameConfig } from '../games/BaseGame';
 import { SpeedTypingGame } from '../games/SpeedTyping';
 import { FakeTriviaGame } from '../games/FakeTrivia';
 import { MarioGame } from '../games/MarioGame';
+import { KnockbackArena } from '../games/KnockbackArena';
 import { logger } from '../utils/logger';
 
 // ── Game Registry ──────────────────────────────────────────────────────────────
@@ -15,6 +16,7 @@ const GAME_REGISTRY: Record<GameType, GameConstructor> = {
   'speed-typing': SpeedTypingGame,
   'fake-trivia': FakeTriviaGame,
   'mario-race': MarioGame,
+  'knockback-arena': KnockbackArena,
   'drawing': SpeedTypingGame,
   'physics-soccer': SpeedTypingGame,
   'ai-image-guess': FakeTriviaGame,
