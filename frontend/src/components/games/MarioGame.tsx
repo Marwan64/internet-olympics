@@ -16,17 +16,17 @@ const BLOCK_SIZE = 32;
 const GOOMBA_W = 36;
 const GOOMBA_H = 36;
 const GRAVITY = 1800;
-const JUMP_FORCE = -680;
+const JUMP_FORCE = -700;
 const WALK_SPEED = 260;
 const SPEED_MULT = 1.8;
 
 const PLATFORMS = [
-  { x: 300, y: 420, w: 160, h: 20 },
+  { x: 300, y: 420, w: 180, h: 20 },
   { x: 560, y: 360, w: 140, h: 20 },
   { x: 800, y: 430, w: 160, h: 20 },
   { x: 1060, y: 380, w: 140, h: 20 },
   { x: 1300, y: 320, w: 160, h: 20 },
-  { x: 1560, y: 390, w: 140, h: 20 },
+  { x: 1540, y: 390, w: 140, h: 20 },
   { x: 1800, y: 340, w: 160, h: 20 },
   { x: 2060, y: 410, w: 140, h: 20 },
   { x: 2300, y: 340, w: 160, h: 20 },
@@ -40,17 +40,18 @@ const PLATFORMS = [
   { x: 4300, y: 300, w: 160, h: 20 },
 ];
 
+// All blocks positioned so player can be BELOW them to hit from underneath
 const QUESTION_BLOCKS = [
-  { id: 'b0', x: 350, y: 355, powerUp: 'speed' as const },
-  { id: 'b1', x: 610, y: 295, powerUp: 'star' as const },
-  { id: 'b2', x: 1110, y: 315, powerUp: 'speed' as const },
-  { id: 'b3', x: 1350, y: 255, powerUp: 'star' as const },
-  { id: 'b4', x: 1850, y: 275, powerUp: 'speed' as const },
-  { id: 'b5', x: 2350, y: 275, powerUp: 'star' as const },
-  { id: 'b6', x: 2610, y: 215, powerUp: 'speed' as const },
-  { id: 'b7', x: 3110, y: 245, powerUp: 'star' as const },
-  { id: 'b8', x: 3610, y: 265, powerUp: 'speed' as const },
-  { id: 'b9', x: 4110, y: 295, powerUp: 'star' as const },
+  { id: 'b0', x: 130, y: 400, powerUp: 'speed' as const },
+  { id: 'b1', x: 720, y: 400, powerUp: 'speed' as const },
+  { id: 'b2', x: 1220, y: 400, powerUp: 'star' as const },
+  { id: 'b3', x: 1340, y: 200, powerUp: 'speed' as const },
+  { id: 'b4', x: 1740, y: 400, powerUp: 'speed' as const },
+  { id: 'b5', x: 2580, y: 160, powerUp: 'star' as const },
+  { id: 'b6', x: 2740, y: 400, powerUp: 'speed' as const },
+  { id: 'b7', x: 3080, y: 190, powerUp: 'speed' as const },
+  { id: 'b8', x: 3740, y: 400, powerUp: 'star' as const },
+  { id: 'b9', x: 4310, y: 180, powerUp: 'star' as const },
 ];
 
 const PIPE = { x: 4650, y: 360, w: 100, h: 160 };
@@ -64,12 +65,267 @@ interface LocalPlayer {
   powerUp: null | 'speed' | 'star'; powerUpExpiry: number;
   finished: boolean; dead: boolean; respawnAt: number;
   jumpPressed: boolean;
+  walkPhase: number; // for shoe animation
 }
 
-interface RemotePlayer { x: number; y: number; powerUp: string | null; finished: boolean; dead: boolean; rank: number }
+interface RemotePlayer { x: number; y: number; powerUp: string | null; finished: boolean; dead: boolean; rank: number; facing?: number }
 interface GoombaClient { id: string; x: number; y: number; alive: boolean; squishAt: number }
 interface BlockClient { id: string; x: number; y: number; hit: boolean; bounceAt: number; powerUp: 'speed' | 'star' | null }
 interface PowerUpClient { id: string; x: number; y: number; type: 'speed' | 'star' }
+
+// ── Mario sprite drawing ──────────────────────────────────────────────────────
+
+function drawMario(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  color: string,
+  facing: 1 | -1,
+  walking: boolean,
+  walkPhase: number,
+  starMode = false,
+  speedMode = false,
+  dead = false,
+) {
+  const SKIN = '#fcd5b5';
+  const HAIR = '#3a1f0a';
+  const NAVY = '#1e3a8a';
+  const SHOE = '#3d1b07';
+  const BTN = '#fcd34d';
+
+  // Star mode: shift hue rapidly using a tint color
+  let capColor = color;
+  let shirtColor = color;
+  if (starMode) {
+    const hue = (performance.now() / 30) % 360;
+    capColor = `hsl(${hue},90%,55%)`;
+    shirtColor = `hsl(${(hue + 180) % 360},90%,55%)`;
+  } else if (speedMode) {
+    capColor = color;
+    shirtColor = '#f97316';
+  }
+  if (dead) {
+    capColor = '#7f1d1d';
+    shirtColor = '#7f1d1d';
+  }
+
+  ctx.save();
+  if (facing === -1) {
+    ctx.translate(x + PLAYER_W, y);
+    ctx.scale(-1, 1);
+  } else {
+    ctx.translate(x, y);
+  }
+
+  // px() pixel grid: we want a 9-wide x 12-tall sprite at 4x scale = 36x48
+  const P = 4;
+
+  // Cap (top)
+  ctx.fillStyle = capColor;
+  // crown
+  ctx.fillRect(2 * P, 0, 5 * P, 2 * P);
+  // brim - extends further out
+  ctx.fillRect(P, 2 * P, 7 * P, P);
+  // small brim front piece
+  ctx.fillRect(0, 2 * P, P, P);
+
+  // Hair (sides under cap)
+  ctx.fillStyle = HAIR;
+  ctx.fillRect(P, 3 * P, P, P);
+  ctx.fillRect(7 * P, 3 * P, P, P);
+  // sideburns
+  ctx.fillRect(P, 4 * P, P, P);
+
+  // Face
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(2 * P, 3 * P, 5 * P, 2 * P);
+  // ear bumps
+  ctx.fillRect(7 * P, 4 * P, P, P);
+
+  // Eyes (whites)
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(3 * P, 3 * P + P / 2, P, P);
+  ctx.fillRect(5 * P, 3 * P + P / 2, P, P);
+  // Pupils
+  ctx.fillStyle = '#0a1a2f';
+  ctx.fillRect(3 * P + P / 2, 3 * P + P, P / 2, P / 2);
+  ctx.fillRect(5 * P + P / 2, 3 * P + P, P / 2, P / 2);
+
+  // Nose (big Mario nose)
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(4 * P, 4 * P, P, P);
+  // nose shadow
+  ctx.fillStyle = '#e8b48e';
+  ctx.fillRect(4 * P, 4 * P + P - 1, P, 1);
+
+  // Mustache
+  ctx.fillStyle = HAIR;
+  ctx.fillRect(3 * P, 5 * P, 3 * P, P);
+  ctx.fillRect(2 * P, 5 * P + P / 2, P, P / 2);
+
+  // Neck/lower face
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(3 * P, 5 * P + P, 2 * P, P / 2);
+
+  // Shirt / shoulder area
+  ctx.fillStyle = shirtColor;
+  ctx.fillRect(P, 6 * P, 7 * P, 2 * P);
+
+  // Overalls (navy)
+  ctx.fillStyle = NAVY;
+  ctx.fillRect(2 * P, 8 * P, 5 * P, 2 * P);
+  // Overalls straps over shirt
+  ctx.fillRect(2 * P + P / 2, 6 * P + P / 2, P, 2 * P);
+  ctx.fillRect(5 * P + P / 2, 6 * P + P / 2, P, 2 * P);
+  // Overalls buttons
+  ctx.fillStyle = BTN;
+  ctx.fillRect(2 * P + P / 2, 8 * P, P / 2, P / 2);
+  ctx.fillRect(6 * P, 8 * P, P / 2, P / 2);
+
+  // Arms (shirt-colored sleeves)
+  ctx.fillStyle = shirtColor;
+  // Left arm
+  ctx.fillRect(0, 6 * P + P, P, 2 * P);
+  // Right arm
+  ctx.fillRect(8 * P, 6 * P + P, P, 2 * P);
+
+  // Hands (skin)
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(0, 8 * P + P, P, P);
+  ctx.fillRect(8 * P, 8 * P + P, P, P);
+  // White gloves
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 9 * P, P, P);
+  ctx.fillRect(8 * P, 9 * P, P, P);
+
+  // Shoes — alternate when walking
+  ctx.fillStyle = SHOE;
+  const shoeOffset = walking && Math.floor(walkPhase) % 2 === 0 ? 2 : 0;
+  if (walking) {
+    // Walking pose: one foot forward, one back
+    if (Math.floor(walkPhase) % 2 === 0) {
+      ctx.fillRect(0, 10 * P, 4 * P, 2 * P);   // back foot back
+      ctx.fillRect(5 * P, 10 * P + P, 4 * P, P); // front foot slightly forward
+    } else {
+      ctx.fillRect(P, 10 * P + P, 3 * P, P);
+      ctx.fillRect(4 * P, 10 * P, 4 * P, 2 * P);
+    }
+  } else {
+    ctx.fillRect(P, 10 * P, 3 * P, 2 * P);
+    ctx.fillRect(5 * P, 10 * P, 3 * P, 2 * P);
+  }
+
+  // Speed mode: motion lines behind
+  if (speedMode) {
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillRect(-P * 2, 7 * P, P, P / 2);
+    ctx.fillRect(-P * 3, 8 * P + P, P * 2, P / 2);
+    ctx.fillRect(-P * 2, 9 * P + P, P, P / 2);
+  }
+
+  ctx.restore();
+}
+
+// ── Goomba drawing ────────────────────────────────────────────────────────────
+
+function drawGoomba(ctx: CanvasRenderingContext2D, x: number, y: number, squished: boolean) {
+  if (squished) {
+    // Squished goomba — flat shape
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(x, y + GOOMBA_H - 8, GOOMBA_W, 8);
+    ctx.fillStyle = '#3d2410';
+    ctx.fillRect(x + 4, y + GOOMBA_H - 4, GOOMBA_W - 8, 2);
+    return;
+  }
+
+  // Body cap (rounded top)
+  ctx.fillStyle = '#8b4513';
+  // Cap upper
+  ctx.fillRect(x + 4, y, GOOMBA_W - 8, 6);
+  ctx.fillRect(x + 2, y + 4, GOOMBA_W - 4, 6);
+  ctx.fillRect(x, y + 8, GOOMBA_W, 10);
+
+  // Underbelly (slightly lighter)
+  ctx.fillStyle = '#d2a679';
+  ctx.fillRect(x + 6, y + 18, GOOMBA_W - 12, 8);
+
+  // Feet
+  ctx.fillStyle = '#3d2410';
+  ctx.fillRect(x + 2, y + GOOMBA_H - 8, 12, 8);
+  ctx.fillRect(x + GOOMBA_W - 14, y + GOOMBA_H - 8, 12, 8);
+
+  // Eyes (whites)
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x + 7, y + 10, 8, 8);
+  ctx.fillRect(x + GOOMBA_W - 15, y + 10, 8, 8);
+
+  // Pupils (angry — looking down-out)
+  ctx.fillStyle = '#0a1a2f';
+  ctx.fillRect(x + 7, y + 13, 4, 4);
+  ctx.fillRect(x + GOOMBA_W - 11, y + 13, 4, 4);
+
+  // Angry eyebrows
+  ctx.fillStyle = '#3d2410';
+  ctx.fillRect(x + 5, y + 8, 8, 2);
+  ctx.fillRect(x + GOOMBA_W - 13, y + 8, 8, 2);
+}
+
+// ── Question block drawing ────────────────────────────────────────────────────
+
+function drawBlock(ctx: CanvasRenderingContext2D, x: number, y: number, hit: boolean) {
+  if (hit) {
+    // Used block — brick texture
+    ctx.fillStyle = '#a16207';
+    ctx.fillRect(x, y, BLOCK_SIZE, BLOCK_SIZE);
+    ctx.fillStyle = '#854d0e';
+    ctx.fillRect(x, y, BLOCK_SIZE, 2);
+    ctx.fillRect(x, y + BLOCK_SIZE - 2, BLOCK_SIZE, 2);
+    ctx.fillRect(x, y, 2, BLOCK_SIZE);
+    ctx.fillRect(x + BLOCK_SIZE - 2, y, 2, BLOCK_SIZE);
+    // Rivets
+    ctx.fillStyle = '#fef3c7';
+    ctx.fillRect(x + 4, y + 4, 3, 3);
+    ctx.fillRect(x + BLOCK_SIZE - 7, y + 4, 3, 3);
+    ctx.fillRect(x + 4, y + BLOCK_SIZE - 7, 3, 3);
+    ctx.fillRect(x + BLOCK_SIZE - 7, y + BLOCK_SIZE - 7, 3, 3);
+    return;
+  }
+  // Question block — yellow with ?
+  // Outer dark border
+  ctx.fillStyle = '#854d0e';
+  ctx.fillRect(x, y, BLOCK_SIZE, BLOCK_SIZE);
+  // Yellow face
+  ctx.fillStyle = '#fbbf24';
+  ctx.fillRect(x + 2, y + 2, BLOCK_SIZE - 4, BLOCK_SIZE - 4);
+  // Lighter highlight on top
+  ctx.fillStyle = '#fde68a';
+  ctx.fillRect(x + 4, y + 4, BLOCK_SIZE - 8, 4);
+  // Darker shadow on bottom
+  ctx.fillStyle = '#d97706';
+  ctx.fillRect(x + 4, y + BLOCK_SIZE - 8, BLOCK_SIZE - 8, 4);
+  // Rivet pixels in corners
+  ctx.fillStyle = '#fef3c7';
+  ctx.fillRect(x + 4, y + 4, 3, 3);
+  ctx.fillRect(x + BLOCK_SIZE - 7, y + 4, 3, 3);
+  ctx.fillRect(x + 4, y + BLOCK_SIZE - 7, 3, 3);
+  ctx.fillRect(x + BLOCK_SIZE - 7, y + BLOCK_SIZE - 7, 3, 3);
+  // The "?" — drawn as pixels
+  ctx.fillStyle = '#fff';
+  // top curve
+  ctx.fillRect(x + 11, y + 8, 10, 3);
+  ctx.fillRect(x + 9, y + 11, 3, 3);
+  ctx.fillRect(x + 20, y + 11, 3, 3);
+  // turn
+  ctx.fillRect(x + 17, y + 14, 6, 3);
+  // descender
+  ctx.fillRect(x + 14, y + 17, 4, 3);
+  // dot
+  ctx.fillRect(x + 14, y + 23, 4, 4);
+  // Outline
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(x + 11, y + 8, 10, 1);
+  ctx.fillRect(x + 14, y + 26, 4, 1);
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -82,9 +338,10 @@ export default function MarioGame() {
     onGround: false, facing: 1,
     powerUp: null, powerUpExpiry: 0,
     finished: false, dead: false, respawnAt: 0, jumpPressed: false,
+    walkPhase: 0,
   });
 
-  const remotePlayers = useRef<Map<string, RemotePlayer>>(new Map());
+  const remotePlayers = useRef<Map<string, RemotePlayer & { lastX?: number }>>(new Map());
   const goombasRef = useRef<GoombaClient[]>([]);
   const blocksRef = useRef<BlockClient[]>(QUESTION_BLOCKS.map(b => ({ ...b, hit: false, bounceAt: 0 })));
   const powerUpsRef = useRef<PowerUpClient[]>([]);
@@ -98,47 +355,58 @@ export default function MarioGame() {
   // ── Server state sync ──────────────────────────────────────────────────────
 
   useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const socket = getSocket() as any;
+    const myId = useGameStore.getState().playerId;
 
-    socket.on('mario:state', (data: any) => {
-      const playerId = useGameStore.getState().playerId;
-      // Update remote players
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const onState = (data: any) => {
       for (const [id, s] of Object.entries(data.players as Record<string, RemotePlayer>)) {
-        if (id === playerId) continue;
-        remotePlayers.current.set(id, s as RemotePlayer);
+        if (id === myId) continue;
+        const prev = remotePlayers.current.get(id);
+        const facing = prev?.lastX !== undefined && s.x !== prev.lastX
+          ? (s.x > prev.lastX ? 1 : -1)
+          : prev?.facing ?? 1;
+        remotePlayers.current.set(id, { ...s, lastX: s.x, facing });
       }
-      // Server is authoritative for goombas
+      // Server-authoritative goombas
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       goombasRef.current = (data.goombas as any[]).map((g: any) => {
         const existing = goombasRef.current.find(e => e.id === g.id);
         return { id: g.id, x: g.x, y: g.y, alive: g.alive, squishAt: existing?.squishAt ?? 0 };
       });
-      // Sync power-ups
-      powerUpsRef.current = (data.powerUps as any[]).map((p: any) => ({
-        id: p.id, x: p.x, y: p.y, type: p.type,
-      }));
-    });
-
-    socket.on('mario:block_hit', (data: any) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      powerUpsRef.current = (data.powerUps as any[]).map((p: any) => ({ id: p.id, x: p.x, y: p.y, type: p.type }));
+      // Sync block state
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const sb of (data.blocks as any[])) {
+        const local = blocksRef.current.find(b => b.id === sb.id);
+        if (local && sb.hit && !local.hit) {
+          local.hit = true;
+          local.bounceAt = performance.now();
+        }
+      }
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const onBlockHit = (data: any) => {
       const block = blocksRef.current.find(b => b.id === data.blockId);
       if (block) { block.hit = true; block.bounceAt = performance.now(); }
-    });
-
-    socket.on('mario:goomba_stomped', (data: any) => {
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const onStomp = (data: any) => {
       const g = goombasRef.current.find(g => g.id === data.goombaId);
       if (g) { g.alive = false; g.squishAt = performance.now(); }
-    });
-
-    socket.on('mario:player_finished', (data: any) => {
-      const playerId = useGameStore.getState().playerId;
-      if (data.playerId === playerId) {
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const onFinish = (data: any) => {
+      if (data.playerId === myId) {
         finishedMsgRef.current = `🏁 You finished #${data.rank}! +${data.points} pts`;
         playerRef.current.finished = true;
       }
-    });
-
-    socket.on('mario:player_hit', (data: any) => {
-      const playerId = useGameStore.getState().playerId;
-      if (data.targetId === playerId) {
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const onHit = (data: any) => {
+      if (data.targetId === myId) {
         const p = playerRef.current;
         p.dead = true;
         p.respawnAt = performance.now() + 3000;
@@ -146,14 +414,20 @@ export default function MarioGame() {
         p.y = PLAYER_START.y;
         p.vx = 0; p.vy = 0;
       }
-    });
+    };
+
+    socket.on('mario:state', onState);
+    socket.on('mario:block_hit', onBlockHit);
+    socket.on('mario:goomba_stomped', onStomp);
+    socket.on('mario:player_finished', onFinish);
+    socket.on('mario:player_hit', onHit);
 
     return () => {
-      socket.off('mario:state');
-      socket.off('mario:block_hit');
-      socket.off('mario:goomba_stomped');
-      socket.off('mario:player_finished');
-      socket.off('mario:player_hit');
+      socket.off('mario:state', onState);
+      socket.off('mario:block_hit', onBlockHit);
+      socket.off('mario:goomba_stomped', onStomp);
+      socket.off('mario:player_finished', onFinish);
+      socket.off('mario:player_hit', onHit);
     };
   }, []);
 
@@ -161,14 +435,17 @@ export default function MarioGame() {
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft' || e.key === 'a') inputRef.current.left = true;
-      if (e.key === 'ArrowRight' || e.key === 'd') inputRef.current.right = true;
-      if ((e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') && !e.repeat) inputRef.current.jump = true;
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') inputRef.current.left = true;
+      if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') inputRef.current.right = true;
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === ' ') {
+        if (!e.repeat) inputRef.current.jump = true;
+        e.preventDefault();
+      }
     };
     const up = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft' || e.key === 'a') inputRef.current.left = false;
-      if (e.key === 'ArrowRight' || e.key === 'd') inputRef.current.right = false;
-      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') inputRef.current.jump = false;
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') inputRef.current.left = false;
+      if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') inputRef.current.right = false;
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === ' ') inputRef.current.jump = false;
     };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
@@ -194,10 +471,12 @@ export default function MarioGame() {
 
     const speed = WALK_SPEED * (p.powerUp === 'speed' ? SPEED_MULT : 1);
 
-    // Horizontal
     if (inp.left) { p.vx = -speed; p.facing = -1; }
     else if (inp.right) { p.vx = speed; p.facing = 1; }
     else p.vx = 0;
+
+    // Walk animation phase
+    if (Math.abs(p.vx) > 5 && p.onGround) p.walkPhase += dt * 8;
 
     // Jump
     if (inp.jump && p.onGround && !p.jumpPressed) {
@@ -208,16 +487,20 @@ export default function MarioGame() {
 
     // Gravity
     p.vy += GRAVITY * dt;
-    if (p.vy > 1200) p.vy = 1200; // terminal velocity
+    if (p.vy > 1200) p.vy = 1200;
 
-    // Move
+    // Save prev for "was above/below" checks
+    const prevBottom = p.y + PLAYER_H;
+    const prevTop = p.y;
+
+    // Apply velocity
     p.x += p.vx * dt;
     p.y += p.vy * dt;
 
     // Clamp horizontal
     p.x = Math.max(0, Math.min(LEVEL_WIDTH - PLAYER_W, p.x));
 
-    // Ground collision
+    // ── Ground ──
     p.onGround = false;
     if (p.y + PLAYER_H >= GROUND_Y) {
       p.y = GROUND_Y - PLAYER_H;
@@ -225,44 +508,68 @@ export default function MarioGame() {
       p.onGround = true;
     }
 
-    // Platform collision (land on top)
+    // ── Platforms (one-way: land on top only) ──
     for (const plat of PLATFORMS) {
-      const wasAbove = (p.y + PLAYER_H - p.vy * dt) <= plat.y + 2;
-      const inX = p.x + PLAYER_W > plat.x + 4 && p.x < plat.x + plat.w - 4;
-      const nowInY = p.y + PLAYER_H > plat.y && p.y + PLAYER_H < plat.y + plat.h + 20;
-      if (wasAbove && inX && nowInY && p.vy >= 0) {
+      const inX = p.x + PLAYER_W > plat.x + 2 && p.x < plat.x + plat.w - 2;
+      if (!inX) continue;
+      const playerBottom = p.y + PLAYER_H;
+      const wasAbove = prevBottom <= plat.y + 1;
+      if (wasAbove && playerBottom >= plat.y && playerBottom <= plat.y + plat.h + 5 && p.vy >= 0) {
         p.y = plat.y - PLAYER_H;
         p.vy = 0;
         p.onGround = true;
       }
     }
 
-    // Block collision (hit from below)
+    // ── Question blocks (solid; hit from below = activate) ──
     for (const block of blocksRef.current) {
-      if (block.hit) continue;
-      const bx = block.x, by = block.y;
-      const inX = p.x + PLAYER_W > bx + 2 && p.x < bx + BLOCK_SIZE - 2;
-      const hitsBottom = p.y < by + BLOCK_SIZE && p.y > by && p.vy < 0 && inX;
-      if (hitsBottom) {
-        p.vy = 0;
-        p.y = by + BLOCK_SIZE;
-        sendInput('block_hit', { blockId: block.id });
+      const blockLeft = block.x;
+      const blockRight = block.x + BLOCK_SIZE;
+      const blockTop = block.y;
+      const blockBottom = block.y + BLOCK_SIZE;
+
+      const inX = p.x + PLAYER_W > blockLeft + 2 && p.x < blockRight - 2;
+      const inY = p.y + PLAYER_H > blockTop && p.y < blockBottom;
+
+      if (!inX || !inY) continue;
+
+      // Hit from below: player's top was below the block last frame, now overlapping
+      const wasBelow = prevTop >= blockBottom - 1;
+      if (wasBelow && p.vy < 0) {
+        p.y = blockBottom;
+        p.vy = 60; // small bounce down
+        if (!block.hit) {
+          block.hit = true; // mark locally to prevent re-sends
+          block.bounceAt = now;
+          sendInput('block_hit', { blockId: block.id });
+        }
+        continue;
       }
-      // Solid from top
-      const wasAbove = (p.y + PLAYER_H - p.vy * dt) <= by + 2;
-      const nowIn = p.y + PLAYER_H > by && p.y < by + BLOCK_SIZE && inX;
-      if (wasAbove && nowIn && p.vy >= 0) {
-        p.y = by - PLAYER_H;
+
+      // Land on top
+      const wasAbove = prevBottom <= blockTop + 1;
+      if (wasAbove && p.vy >= 0) {
+        p.y = blockTop - PLAYER_H;
         p.vy = 0;
         p.onGround = true;
+        continue;
+      }
+
+      // Side collision: push player out horizontally
+      const playerCenterX = p.x + PLAYER_W / 2;
+      const blockCenterX = blockLeft + BLOCK_SIZE / 2;
+      if (playerCenterX < blockCenterX) {
+        p.x = blockLeft - PLAYER_W;
+      } else {
+        p.x = blockRight;
       }
     }
 
-    // Power-up collection
+    // ── Power-up collection ──
     powerUpsRef.current = powerUpsRef.current.filter(pu => {
       const dx = Math.abs(p.x + PLAYER_W / 2 - (pu.x + 16));
       const dy = Math.abs(p.y + PLAYER_H / 2 - (pu.y + 16));
-      if (dx < 36 && dy < 36) {
+      if (dx < 32 && dy < 36) {
         sendInput('powerup_collect', { powerUpId: pu.id });
         p.powerUp = pu.type;
         p.powerUpExpiry = now + 8000;
@@ -271,58 +578,58 @@ export default function MarioGame() {
       return true;
     });
 
-    // Goomba collision
+    // ── Goombas ──
     for (const g of goombasRef.current) {
       if (!g.alive) continue;
-      const dx = Math.abs(p.x + PLAYER_W / 2 - (g.x + GOOMBA_W / 2));
-      const dy = p.y + PLAYER_H - (g.y + GOOMBA_H / 2);
-      const inX = dx < PLAYER_W / 2 + GOOMBA_W / 2 - 6;
-      if (!inX) continue;
+      const goombaTop = g.y;
+      const goombaBottom = g.y + GOOMBA_H;
+      const goombaLeft = g.x;
+      const goombaRight = g.x + GOOMBA_W;
 
-      const stompingFrom = dy > 0 && dy < 30 && p.vy > 0;
-      if (stompingFrom) {
+      const xOver = p.x + PLAYER_W > goombaLeft + 2 && p.x < goombaRight - 2;
+      const yOver = p.y + PLAYER_H > goombaTop && p.y < goombaBottom;
+      if (!xOver || !yOver) continue;
+
+      // Stomping = player was above goomba's top last frame AND moving downward
+      const wasAbove = prevBottom <= goombaTop + 4;
+      const stomping = wasAbove && p.vy > 0;
+
+      if (stomping) {
         g.alive = false;
         g.squishAt = now;
-        p.vy = -350;
+        p.vy = -380;
+        p.y = goombaTop - PLAYER_H;
         sendInput('goomba_stomp', { goombaId: g.id });
-      } else if (Math.abs(p.y + PLAYER_H / 2 - (g.y + GOOMBA_H / 2)) < GOOMBA_H / 2 + PLAYER_H / 2 - 8) {
-        if (p.powerUp === 'star') {
-          g.alive = false;
-          g.squishAt = now;
-          sendInput('goomba_stomp', { goombaId: g.id });
-        } else if (!p.dead) {
-          p.dead = true;
-          p.respawnAt = now + 3000;
-          p.vy = -400;
-        }
+      } else if (p.powerUp === 'star') {
+        g.alive = false;
+        g.squishAt = now;
+        sendInput('goomba_stomp', { goombaId: g.id });
+      } else if (!p.dead) {
+        p.dead = true;
+        p.respawnAt = now + 2500;
+        p.vy = -350;
       }
     }
 
-    // Star: check hit other players
+    // Star: hit other players
     if (p.powerUp === 'star') {
-      const room = useGameStore.getState().room;
-      const myId = useGameStore.getState().playerId;
       for (const [id, rp] of remotePlayers.current) {
-        if (rp.finished || rp.dead) continue;
-        const rplayer = room?.players.find(pl => pl.socketId === id);
-        if (!rplayer) continue;
+        if (rp.finished || rp.dead || rp.powerUp === 'star') continue;
         const dx = Math.abs(p.x - rp.x);
         const dy = Math.abs(p.y - rp.y);
-        if (dx < 60 && dy < 60) {
-          sendInput('player_hit', { targetId: id });
-        }
+        if (dx < 50 && dy < 60) sendInput('player_hit', { targetId: id });
       }
     }
 
     // Reach pipe
-    if (!p.finished && p.x + PLAYER_W > PIPE.x && p.y + PLAYER_H > PIPE.y) {
+    if (!p.finished && p.x + PLAYER_W > PIPE.x + 10 && p.y + PLAYER_H > PIPE.y + 20) {
       p.finished = true;
       sendInput('level_complete', {});
     }
 
-    // Camera: smoothly follow player, clamp to level
+    // Camera follow
     const targetCamX = p.x - CANVAS_W * 0.35;
-    camRef.current.x += (targetCamX - camRef.current.x) * Math.min(1, dt * 8);
+    camRef.current.x += (targetCamX - camRef.current.x) * Math.min(1, dt * 6);
     camRef.current.x = Math.max(0, Math.min(LEVEL_WIDTH - CANVAS_W, camRef.current.x));
 
     // Send position at 10Hz
@@ -340,159 +647,172 @@ export default function MarioGame() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // RESET state — fixes after-image
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
+    ctx.globalAlpha = 1;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+    ctx.imageSmoothingEnabled = false;
+
     const cam = camRef.current.x;
     const now = performance.now();
     const p = playerRef.current;
 
-    // Sky gradient
+    // Sky
     const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-    grad.addColorStop(0, '#3b82f6');
-    grad.addColorStop(1, '#60a5fa');
+    grad.addColorStop(0, '#5b9bd5');
+    grad.addColorStop(1, '#9ed0f5');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    // Background hills
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    for (let i = 0; i < 8; i++) {
-      const hx = (i * 700 - (cam * 0.3) % 700) - 100;
+    // Background hills (parallax)
+    ctx.fillStyle = 'rgba(34,139,80,0.45)';
+    for (let i = 0; i < 12; i++) {
+      const hx = ((i * 500 - cam * 0.25) % 2400 + 2400) % 2400 - 200;
       ctx.beginPath();
-      ctx.arc(hx, CANVAS_H - 60, 180, Math.PI, 0);
+      ctx.arc(hx, GROUND_Y, 240, Math.PI, 0);
       ctx.fill();
     }
 
     // Clouds
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    const cloudOffsets = [{ x: 200, y: 80 }, { x: 600, y: 50 }, { x: 1050, y: 100 }, { x: 1500, y: 60 }];
-    for (const cloud of cloudOffsets) {
-      const cx = ((cloud.x - cam * 0.2) % (CANVAS_W + 200) + CANVAS_W + 200) % (CANVAS_W + 200) - 100;
-      ctx.beginPath(); ctx.arc(cx, cloud.y, 30, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(cx + 35, cloud.y - 10, 22, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(cx + 60, cloud.y, 28, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    const clouds = [{ x: 150, y: 90 }, { x: 700, y: 60 }, { x: 1200, y: 110 }, { x: 1700, y: 70 }, { x: 2300, y: 90 }];
+    for (const c of clouds) {
+      const cx = ((c.x - cam * 0.15) % 2200 + 2200) % 2200 - 100;
+      ctx.beginPath(); ctx.arc(cx, c.y, 22, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + 26, c.y - 8, 18, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + 48, c.y, 22, 0, Math.PI * 2); ctx.fill();
     }
 
     // Ground
-    ctx.fillStyle = '#16a34a';
-    ctx.fillRect(-cam, GROUND_Y, LEVEL_WIDTH, 20);
-    ctx.fillStyle = '#92400e';
-    ctx.fillRect(-cam, GROUND_Y + 20, LEVEL_WIDTH, CANVAS_H);
-
-    // Brick pattern on ground
-    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    // Grass top stripe
+    ctx.fillStyle = '#5fc34a';
+    ctx.fillRect(-cam, GROUND_Y, LEVEL_WIDTH, 16);
+    ctx.fillStyle = '#3f9c2b';
+    ctx.fillRect(-cam, GROUND_Y + 14, LEVEL_WIDTH, 4);
+    // Dirt
+    ctx.fillStyle = '#c97e2c';
+    ctx.fillRect(-cam, GROUND_Y + 18, LEVEL_WIDTH, CANVAS_H - GROUND_Y - 18);
+    // Dirt block pattern
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
     ctx.lineWidth = 1;
-    const brickW = 60, brickH = 20;
-    const startBrickX = Math.floor(cam / brickW) * brickW;
-    for (let bx = startBrickX; bx < cam + CANVAS_W + brickW; bx += brickW) {
-      for (let by = GROUND_Y + 20; by < CANVAS_H; by += brickH) {
-        const offset = (Math.floor(by / brickH) % 2) * 30;
-        ctx.strokeRect(bx + offset - cam, by, brickW, brickH);
+    for (let bx = Math.floor(cam / 40) * 40; bx < cam + CANVAS_W + 40; bx += 40) {
+      for (let by = GROUND_Y + 18; by < CANVAS_H; by += 40) {
+        const offset = (Math.floor(by / 40) % 2) * 20;
+        ctx.strokeRect(bx + offset - cam, by, 40, 40);
       }
     }
+    // Dark line below grass
+    ctx.fillStyle = '#7a4c1a';
+    ctx.fillRect(-cam, GROUND_Y + 18, LEVEL_WIDTH, 2);
 
-    // Platforms
+    // Platforms — brick style
     for (const plat of PLATFORMS) {
       const px = plat.x - cam;
-      if (px + plat.w < 0 || px > CANVAS_W) continue;
-      ctx.fillStyle = '#7c3aed';
+      if (px + plat.w < -20 || px > CANVAS_W + 20) continue;
+      ctx.fillStyle = '#8b4513';
       ctx.fillRect(px, plat.y, plat.w, plat.h);
-      ctx.fillStyle = '#a78bfa';
-      ctx.fillRect(px, plat.y, plat.w, 5);
-      ctx.fillStyle = '#6d28d9';
-      ctx.fillRect(px, plat.y + plat.h - 4, plat.w, 4);
+      ctx.fillStyle = '#a0623c';
+      ctx.fillRect(px, plat.y, plat.w, 3);
+      ctx.fillStyle = '#6b3410';
+      ctx.fillRect(px, plat.y + plat.h - 3, plat.w, 3);
+      // Brick lines
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+      ctx.lineWidth = 1;
+      for (let bx = 0; bx < plat.w; bx += 20) {
+        ctx.beginPath();
+        ctx.moveTo(px + bx, plat.y);
+        ctx.lineTo(px + bx, plat.y + plat.h);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.moveTo(px, plat.y + plat.h / 2);
+      ctx.lineTo(px + plat.w, plat.y + plat.h / 2);
+      ctx.stroke();
     }
 
     // Question blocks
     for (const block of blocksRef.current) {
       const bx = block.x - cam;
-      if (bx + BLOCK_SIZE < 0 || bx > CANVAS_W) continue;
+      if (bx + BLOCK_SIZE < -10 || bx > CANVAS_W + 10) continue;
       const bounce = block.bounceAt > 0 && now - block.bounceAt < 300
-        ? -Math.sin((now - block.bounceAt) / 300 * Math.PI) * 10
+        ? -Math.sin(((now - block.bounceAt) / 300) * Math.PI) * 10
         : 0;
-      const by = block.y + bounce;
-
-      if (block.hit) {
-        ctx.fillStyle = '#78716c';
-        ctx.fillRect(bx, by, BLOCK_SIZE, BLOCK_SIZE);
-        ctx.fillStyle = '#57534e';
-        ctx.fillRect(bx + 2, by + 2, BLOCK_SIZE - 4, BLOCK_SIZE - 4);
-      } else {
-        ctx.fillStyle = '#fbbf24';
-        ctx.fillRect(bx, by, BLOCK_SIZE, BLOCK_SIZE);
-        ctx.fillStyle = '#f59e0b';
-        ctx.fillRect(bx + 2, by + 2, BLOCK_SIZE - 4, BLOCK_SIZE - 4);
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 18px serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('?', bx + BLOCK_SIZE / 2, by + BLOCK_SIZE - 8);
-        ctx.textAlign = 'left';
-      }
+      drawBlock(ctx, bx, block.y + bounce, block.hit);
     }
 
-    // Power-ups (floating)
+    // Power-ups
     for (const pu of powerUpsRef.current) {
       const px = pu.x - cam;
       if (px < -40 || px > CANVAS_W + 40) continue;
-      const floatY = pu.y - Math.sin(now / 400) * 5;
-      ctx.fillStyle = pu.type === 'speed' ? '#f97316' : '#fde68a';
-      ctx.beginPath();
-      ctx.arc(px + 16, floatY + 16, 14, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.font = '16px serif';
-      ctx.fillText(pu.type === 'speed' ? '⚡' : '⭐', px + 5, floatY + 22);
+      const floatY = pu.y - Math.sin(now / 350) * 4;
+      if (pu.type === 'speed') {
+        // Mushroom
+        ctx.fillStyle = '#dc2626';
+        ctx.fillRect(px + 4, floatY + 2, 24, 14);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(px + 8, floatY + 6, 5, 5);
+        ctx.fillRect(px + 19, floatY + 6, 5, 5);
+        ctx.fillStyle = '#fde68a';
+        ctx.fillRect(px + 6, floatY + 16, 20, 12);
+        ctx.fillStyle = '#0a1a2f';
+        ctx.fillRect(px + 11, floatY + 19, 3, 4);
+        ctx.fillRect(px + 18, floatY + 19, 3, 4);
+      } else {
+        // Star
+        const flash = Math.floor(now / 100) % 2 === 0;
+        ctx.fillStyle = flash ? '#fde047' : '#fbbf24';
+        // 5-point star approximation
+        const cx = px + 16, cy = floatY + 16;
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) {
+          const r = i % 2 === 0 ? 14 : 6;
+          const a = (i * Math.PI) / 5 - Math.PI / 2;
+          const sx = cx + Math.cos(a) * r;
+          const sy = cy + Math.sin(a) * r;
+          if (i === 0) ctx.moveTo(sx, sy);
+          else ctx.lineTo(sx, sy);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#0a1a2f';
+        ctx.fillRect(cx - 4, cy - 2, 2, 3);
+        ctx.fillRect(cx + 2, cy - 2, 2, 3);
+      }
     }
 
     // End pipe
     const pipeX = PIPE.x - cam;
-    if (pipeX < CANVAS_W + 120) {
+    if (pipeX < CANVAS_W + 120 && pipeX > -PIPE.w - 20) {
       // Pipe body
-      ctx.fillStyle = '#16a34a';
-      ctx.fillRect(pipeX, PIPE.y + 30, PIPE.w, PIPE.h - 30);
-      // Pipe rim
       ctx.fillStyle = '#15803d';
-      ctx.fillRect(pipeX - 5, PIPE.y, PIPE.w + 10, 30);
+      ctx.fillRect(pipeX, PIPE.y + 28, PIPE.w, PIPE.h - 28);
       ctx.fillStyle = '#22c55e';
-      ctx.fillRect(pipeX, PIPE.y + 30, 6, PIPE.h - 30);
-      // Flag/label
-      ctx.font = '28px serif';
-      ctx.fillText('🏁', pipeX + 25, PIPE.y - 10);
+      ctx.fillRect(pipeX, PIPE.y + 28, 8, PIPE.h - 28);
+      ctx.fillStyle = '#166534';
+      ctx.fillRect(pipeX + PIPE.w - 6, PIPE.y + 28, 6, PIPE.h - 28);
+      // Pipe rim
+      ctx.fillStyle = '#16a34a';
+      ctx.fillRect(pipeX - 6, PIPE.y, PIPE.w + 12, 28);
+      ctx.fillStyle = '#22c55e';
+      ctx.fillRect(pipeX - 6, PIPE.y, PIPE.w + 12, 5);
+      ctx.fillStyle = '#166534';
+      ctx.fillRect(pipeX - 6, PIPE.y + 23, PIPE.w + 12, 5);
+      // Flag above
+      ctx.font = '32px serif';
+      ctx.fillText('🏁', pipeX + PIPE.w / 2 - 16, PIPE.y - 10);
     }
 
     // Goombas
     for (const g of goombasRef.current) {
       const gx = g.x - cam;
-      if (gx + GOOMBA_W < 0 || gx > CANVAS_W) continue;
-      const deadTime = g.squishAt > 0 ? now - g.squishAt : -1;
-      if (!g.alive && deadTime > 600) continue;
-
-      const squished = !g.alive && deadTime >= 0;
-      const gy = squished ? GROUND_Y - 10 : g.y;
-      const gh = squished ? 10 : GOOMBA_H;
-
-      ctx.fillStyle = '#92400e';
-      ctx.fillRect(gx, gy, GOOMBA_W, gh);
-      if (!squished) {
-        // Head/cap
-        ctx.fillStyle = '#78350f';
-        ctx.beginPath();
-        ctx.arc(gx + GOOMBA_W / 2, gy + 10, GOOMBA_W / 2, Math.PI, 0);
-        ctx.fill();
-        // Eyes
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(gx + 5, gy + 10, 9, 9);
-        ctx.fillRect(gx + 20, gy + 10, 9, 9);
-        ctx.fillStyle = '#000';
-        ctx.fillRect(gx + 8, gy + 13, 4, 4);
-        ctx.fillRect(gx + 23, gy + 13, 4, 4);
-        // Angry eyebrows
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(gx + 4, gy + 9); ctx.lineTo(gx + 14, gy + 11); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(gx + 30, gy + 9); ctx.lineTo(gx + 20, gy + 11); ctx.stroke();
-        // Feet
-        ctx.fillStyle = '#78350f';
-        ctx.fillRect(gx + 2, gy + GOOMBA_H - 8, 12, 8);
-        ctx.fillRect(gx + GOOMBA_W - 14, gy + GOOMBA_H - 8, 12, 8);
-      }
+      if (gx + GOOMBA_W < -10 || gx > CANVAS_W + 10) continue;
+      const deadFor = g.squishAt > 0 ? now - g.squishAt : -1;
+      if (!g.alive && deadFor > 800) continue;
+      const squished = !g.alive && deadFor >= 0;
+      drawGoomba(ctx, gx, g.y, squished);
     }
 
     // Remote players
@@ -503,128 +823,92 @@ export default function MarioGame() {
       if (rpx + PLAYER_W < -50 || rpx > CANVAS_W + 50) continue;
       const pl = room?.players.find(pl => pl.socketId === id);
       if (!pl) continue;
+      const facing = (rp.facing as 1 | -1) ?? 1;
+      const walking = rp.lastX !== undefined && Math.abs(rp.x - (rp.lastX ?? rp.x)) > 0.5;
+      drawMario(ctx, rpx, rp.y, pl.color, facing, walking, now / 100, rp.powerUp === 'star', rp.powerUp === 'speed');
 
-      const isStar = rp.powerUp === 'star';
-      ctx.globalAlpha = 0.85;
-      if (isStar) { ctx.shadowColor = '#fde68a'; ctx.shadowBlur = 15; }
-      ctx.fillStyle = pl.color;
-      ctx.fillRect(rpx, rp.y, PLAYER_W, PLAYER_H);
-      if (isStar) ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
-
-      // Avatar + name
-      ctx.font = '22px serif';
-      ctx.fillText(pl.avatar, rpx + 5, rp.y - 2);
+      // Name above
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(rpx + PLAYER_W / 2 - 30, rp.y - 18, 60, 14);
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 10px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(pl.username, rpx + PLAYER_W / 2, rp.y - 14);
+      ctx.fillText(pl.username.slice(0, 8), rpx + PLAYER_W / 2, rp.y - 8);
       ctx.textAlign = 'left';
 
-      // Finished badge
       if (rp.finished) {
         ctx.fillStyle = '#fbbf24';
-        ctx.font = '14px serif';
-        ctx.fillText(`#${rp.rank}`, rpx + PLAYER_W / 2 - 6, rp.y - 26);
+        ctx.font = '16px serif';
+        ctx.fillText(`🏆#${rp.rank}`, rpx + PLAYER_W / 2 - 16, rp.y - 22);
       }
     }
 
     // Local player
     if (!p.dead) {
-      const lx = p.x - cam;
-      const isStar = p.powerUp === 'star';
-      const isSpeed = p.powerUp === 'speed';
-
-      if (isStar) {
-        ctx.shadowColor = '#fde68a';
-        ctx.shadowBlur = 20;
-        // Rainbow flash
-        const hue = (now / 20) % 360;
-        ctx.fillStyle = `hsl(${hue},100%,60%)`;
-      } else if (isSpeed) {
-        ctx.fillStyle = '#f97316';
-        ctx.shadowColor = '#f97316';
-        ctx.shadowBlur = 10;
-      } else {
-        const myRoom = useGameStore.getState().room;
-        const myId = useGameStore.getState().playerId;
-        const myPlayer = myRoom?.players.find(pl => pl.id === myId);
-        ctx.fillStyle = myPlayer?.color ?? '#7c3aed';
-      }
-
-      ctx.fillRect(lx, p.y, PLAYER_W, PLAYER_H);
-      ctx.shadowBlur = 0;
-
-      // Avatar
       const myRoom = useGameStore.getState().room;
       const myId = useGameStore.getState().playerId;
       const myPlayer = myRoom?.players.find(pl => pl.id === myId);
-      ctx.font = '22px serif';
-      ctx.save();
-      if (p.facing === -1) {
-        ctx.scale(-1, 1);
-        ctx.fillText(myPlayer?.avatar ?? '🎮', -(lx + PLAYER_W - 3), p.y - 2);
-      } else {
-        ctx.fillText(myPlayer?.avatar ?? '🎮', lx + 5, p.y - 2);
-      }
-      ctx.restore();
+      const color = myPlayer?.color ?? '#dc2626';
+      const lx = p.x - cam;
+      const walking = Math.abs(p.vx) > 5 && p.onGround;
+
+      drawMario(ctx, lx, p.y, color, p.facing, walking, p.walkPhase, p.powerUp === 'star', p.powerUp === 'speed');
 
       // YOU label
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(lx + PLAYER_W / 2 - 18, p.y - 18, 36, 14);
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 10px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('YOU', lx + PLAYER_W / 2, p.y - 14);
+      ctx.fillText('YOU', lx + PLAYER_W / 2, p.y - 8);
       ctx.textAlign = 'left';
     } else {
-      // Death respawn countdown
       const remaining = Math.ceil((p.respawnAt - now) / 1000);
       const lx = p.x - cam;
       ctx.fillStyle = 'rgba(239,68,68,0.8)';
-      ctx.font = 'bold 20px sans-serif';
+      ctx.font = 'bold 22px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(`💀 ${remaining}s`, lx + PLAYER_W / 2, p.y - 10);
+      ctx.fillText(`💀 ${Math.max(0, remaining)}`, lx + PLAYER_W / 2, p.y + 20);
       ctx.textAlign = 'left';
     }
 
-    // HUD: power-up indicator
+    // HUD power-up
     if (p.powerUp) {
       const remaining = Math.max(0, (p.powerUpExpiry - now) / 1000);
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(10, 10, 140, 36);
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(10, 10, 160, 36);
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 14px sans-serif';
-      ctx.fillText(`${p.powerUp === 'star' ? '⭐ STAR' : '⚡ SPEED'} ${remaining.toFixed(1)}s`, 16, 32);
+      ctx.fillText(`${p.powerUp === 'star' ? '⭐ STAR' : '🍄 SPEED'}  ${remaining.toFixed(1)}s`, 18, 33);
     }
 
-    // HUD: finish message
+    // Progress bar
+    const progress = Math.min(1, p.x / (PIPE.x - 100));
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(CANVAS_W / 2 - 160, CANVAS_H - 28, 320, 14);
+    ctx.fillStyle = p.powerUp === 'star' ? '#fde047' : '#7c3aed';
+    ctx.fillRect(CANVAS_W / 2 - 158, CANVAS_H - 26, 316 * progress, 10);
+    ctx.font = '11px serif';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('🏁', CANVAS_W / 2 + 145, CANVAS_H - 17);
+
+    // Finish msg
     if (finishedMsgRef.current) {
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(CANVAS_W / 2 - 160, CANVAS_H / 2 - 30, 320, 60);
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(CANVAS_W / 2 - 180, CANVAS_H / 2 - 30, 360, 60);
       ctx.fillStyle = '#fbbf24';
       ctx.font = 'bold 22px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(finishedMsgRef.current, CANVAS_W / 2, CANVAS_H / 2 + 8);
       ctx.textAlign = 'left';
     }
-
-    // Progress bar (minimap)
-    const progress = Math.min(1, p.x / (PIPE.x - 100));
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.fillRect(CANVAS_W / 2 - 150, CANVAS_H - 20, 300, 10);
-    ctx.fillStyle = p.powerUp === 'star' ? '#fde68a' : '#7c3aed';
-    ctx.fillRect(CANVAS_W / 2 - 150, CANVAS_H - 20, 300 * progress, 10);
-    ctx.fillStyle = '#fff';
-    ctx.font = '9px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('🏁', CANVAS_W / 2 + 150 - 4, CANVAS_H - 12);
-    ctx.textAlign = 'left';
   }, []);
 
   // ── Game loop ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const loop = (time: number) => {
-      const dt = lastTimeRef.current ? Math.min((time - lastTimeRef.current) / 1000, 0.05) : 0.016;
+      const dt = lastTimeRef.current ? Math.min((time - lastTimeRef.current) / 1000, 0.04) : 0.016;
       lastTimeRef.current = time;
       update(dt);
       render();
@@ -634,20 +918,18 @@ export default function MarioGame() {
     return () => cancelAnimationFrame(animRef.current);
   }, [update, render]);
 
-  // ── Touch controls ─────────────────────────────────────────────────────────
-
   return (
     <div className="flex flex-col items-center gap-2">
-      <div className="text-white/50 text-xs text-center mb-1">
-        Arrow keys / WASD to move • Up/W/Space to jump • Stomp Goombas • Hit ? blocks • Reach the 🏁
+      <div className="text-white/60 text-xs text-center mb-1 px-2">
+        Arrows / WASD to move • Space / Up to jump • Stomp Goombas from above • Jump UP into yellow ? blocks
       </div>
 
       <canvas
         ref={canvasRef}
         width={CANVAS_W}
         height={CANVAS_H}
-        className="rounded-xl border border-white/10"
-        style={{ maxWidth: '100%', touchAction: 'none' }}
+        className="rounded-xl border border-white/10 bg-black"
+        style={{ maxWidth: '100%', touchAction: 'none', imageRendering: 'pixelated' }}
       />
 
       {/* Mobile controls */}

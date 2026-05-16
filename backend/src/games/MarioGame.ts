@@ -33,16 +33,16 @@ export const PLATFORMS = [
 ];
 
 export const QUESTION_BLOCKS = [
-  { id: 'b0', x: 350, y: 355, powerUp: 'speed' as const },
-  { id: 'b1', x: 610, y: 295, powerUp: 'star' as const },
-  { id: 'b2', x: 1110, y: 315, powerUp: 'speed' as const },
-  { id: 'b3', x: 1350, y: 255, powerUp: 'star' as const },
-  { id: 'b4', x: 1850, y: 275, powerUp: 'speed' as const },
-  { id: 'b5', x: 2350, y: 275, powerUp: 'star' as const },
-  { id: 'b6', x: 2610, y: 215, powerUp: 'speed' as const },
-  { id: 'b7', x: 3110, y: 245, powerUp: 'star' as const },
-  { id: 'b8', x: 3610, y: 265, powerUp: 'speed' as const },
-  { id: 'b9', x: 4110, y: 295, powerUp: 'star' as const },
+  { id: 'b0', x: 130, y: 400, powerUp: 'speed' as const },
+  { id: 'b1', x: 720, y: 400, powerUp: 'speed' as const },
+  { id: 'b2', x: 1220, y: 400, powerUp: 'star' as const },
+  { id: 'b3', x: 1340, y: 200, powerUp: 'speed' as const },
+  { id: 'b4', x: 1740, y: 400, powerUp: 'speed' as const },
+  { id: 'b5', x: 2580, y: 160, powerUp: 'star' as const },
+  { id: 'b6', x: 2740, y: 400, powerUp: 'speed' as const },
+  { id: 'b7', x: 3080, y: 190, powerUp: 'speed' as const },
+  { id: 'b8', x: 3740, y: 400, powerUp: 'star' as const },
+  { id: 'b9', x: 4310, y: 180, powerUp: 'star' as const },
 ];
 
 const GOOMBAS_INIT = [
