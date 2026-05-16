@@ -181,8 +181,8 @@ export default function ShoppingCart() {
     if (!mountRef.current) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#1a0a2e');
-    scene.fog = new THREE.FogExp2('#1a0a2e', 0.0006);
+    scene.background = new THREE.Color('#87ceeb');
+    scene.fog = new THREE.Fog('#c9e8f5', 900, 2800);
 
     const camera = new THREE.PerspectiveCamera(70, CANVAS_W / CANVAS_H, 1, 5000);
 
@@ -190,38 +190,30 @@ export default function ShoppingCart() {
     renderer.setSize(CANVAS_W, CANVAS_H);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = false;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    renderer.toneMapping = THREE.NoToneMapping;
     mountRef.current.appendChild(renderer.domElement);
     renderer.domElement.style.maxWidth = '100%';
     renderer.domElement.style.borderRadius = '12px';
 
-    // ── Lighting ──
-    scene.add(new THREE.AmbientLight(0x220033, 1.2));
-    const sun = new THREE.DirectionalLight(0xffe4ff, 1.4);
-    sun.position.set(200, 600, -200);
+    // ── Sunny day lighting ──
+    scene.add(new THREE.AmbientLight(0xfff8e7, 0.8));
+    const sun = new THREE.DirectionalLight(0xfff5d0, 2.2);
+    sun.position.set(400, 900, 300);
     scene.add(sun);
+    // Soft fill from below (bounced ground light)
+    const fill = new THREE.HemisphereLight(0x87ceeb, 0x5a9e3a, 0.5);
+    scene.add(fill);
 
-    // Neon strip lights along track sides
-    const neonColors = [0xff00ff, 0x00ffff, 0xff6600, 0x00ff88];
-    for (let i = 0; i < 28; i++) {
-      const x = 200 + i * 240;
-      const side = i % 2 === 0 ? -1 : 1;
-      const col = neonColors[i % neonColors.length];
-      const light = new THREE.PointLight(col, 1.5, 280);
-      light.position.set(x, terrainHeight(x) + 40, side * (LANE_HALF + 10));
-      scene.add(light);
-
-      // Glowing pillar
-      const pillar = new THREE.Mesh(
-        new THREE.CylinderGeometry(3, 3, 50, 6),
-        new THREE.MeshBasicMaterial({ color: col })
-      );
-      pillar.position.set(x, terrainHeight(x) + 25, side * (LANE_HALF + 10));
-      scene.add(pillar);
+    // ── Grassy ground planes outside the road ──
+    const grassMat = new THREE.MeshLambertMaterial({ color: 0x5aad3a });
+    for (const side of [-1, 1]) {
+      const grassGeom = new THREE.PlaneGeometry(TRACK_LENGTH, 1200, 1, 1);
+      grassGeom.rotateX(-Math.PI / 2);
+      grassGeom.translate(TRACK_LENGTH / 2, -TRACK_LENGTH * 0.07, side * (LANE_HALF + 660));
+      scene.add(new THREE.Mesh(grassGeom, grassMat));
     }
 
-    // ── Track (tiled floor pattern) ──
+    // ── Road (asphalt) ──
     const TRACK_WIDTH_VIS = LANE_HALF * 2 + 80;
     const segments = 300;
     const trackGeom = new THREE.PlaneGeometry(TRACK_LENGTH, TRACK_WIDTH_VIS, segments, 8);
@@ -235,72 +227,101 @@ export default function ShoppingCart() {
     pos.needsUpdate = true;
     trackGeom.computeVertexNormals();
 
-    // Supermarket floor — dark tile texture via canvas
-    const floorCanvas = document.createElement('canvas');
-    floorCanvas.width = 128; floorCanvas.height = 128;
-    const fc = floorCanvas.getContext('2d')!;
-    fc.fillStyle = '#1c1c2e';
-    fc.fillRect(0, 0, 128, 128);
-    fc.strokeStyle = '#2a2a4a';
-    fc.lineWidth = 2;
-    for (let i = 0; i <= 4; i++) { fc.beginPath(); fc.moveTo(i * 32, 0); fc.lineTo(i * 32, 128); fc.stroke(); }
-    for (let i = 0; i <= 4; i++) { fc.beginPath(); fc.moveTo(0, i * 32); fc.lineTo(128, i * 32); fc.stroke(); }
-    const floorTex = new THREE.CanvasTexture(floorCanvas);
-    floorTex.wrapS = THREE.RepeatWrapping;
-    floorTex.wrapT = THREE.RepeatWrapping;
-    floorTex.repeat.set(TRACK_LENGTH / 80, TRACK_WIDTH_VIS / 80);
-    const trackMat = new THREE.MeshLambertMaterial({ map: floorTex });
-    scene.add(new THREE.Mesh(trackGeom, trackMat));
+    // Asphalt texture via canvas
+    const asphaltCanvas = document.createElement('canvas');
+    asphaltCanvas.width = 128; asphaltCanvas.height = 128;
+    const ac = asphaltCanvas.getContext('2d')!;
+    ac.fillStyle = '#3a3a3a';
+    ac.fillRect(0, 0, 128, 128);
+    // Subtle noise for asphalt grain
+    for (let n = 0; n < 300; n++) {
+      const nx = Math.random() * 128, ny = Math.random() * 128;
+      const shade = Math.floor(Math.random() * 20 + 45);
+      ac.fillStyle = `rgb(${shade},${shade},${shade})`;
+      ac.fillRect(nx, ny, 2, 2);
+    }
+    const asphaltTex = new THREE.CanvasTexture(asphaltCanvas);
+    asphaltTex.wrapS = THREE.RepeatWrapping;
+    asphaltTex.wrapT = THREE.RepeatWrapping;
+    asphaltTex.repeat.set(TRACK_LENGTH / 60, TRACK_WIDTH_VIS / 60);
+    scene.add(new THREE.Mesh(trackGeom, new THREE.MeshLambertMaterial({ map: asphaltTex })));
 
-    // ── Lane markings (center line + edges) ──
-    const lineGeom = new THREE.PlaneGeometry(TRACK_LENGTH, 4, 1, 1);
-    lineGeom.rotateX(-Math.PI / 2);
-    lineGeom.translate(TRACK_LENGTH / 2, 0.5, 0);
-    // shift Y to terrain; approximate flat for the marking
-    scene.add(new THREE.Mesh(lineGeom, new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.6 })));
-
-    // ── Side barriers with neon trim ──
-    const barrierMat = new THREE.MeshLambertMaterial({ color: 0x111128 });
-    const barrierH = 35;
-    const barrierGeom = new THREE.BoxGeometry(TRACK_LENGTH, barrierH, 18);
-    const barrierL = new THREE.Mesh(barrierGeom, barrierMat);
-    barrierL.position.set(TRACK_LENGTH / 2, -TRACK_LENGTH * 0.07 + barrierH / 2, -LANE_HALF - 14);
-    scene.add(barrierL);
-    const barrierR = new THREE.Mesh(barrierGeom, barrierMat);
-    barrierR.position.set(TRACK_LENGTH / 2, -TRACK_LENGTH * 0.07 + barrierH / 2, LANE_HALF + 14);
-    scene.add(barrierR);
-
-    // Neon trim on barriers
-    for (const side of [-1, 1]) {
-      const trimGeom = new THREE.BoxGeometry(TRACK_LENGTH, 4, 2);
-      const trimMat = new THREE.MeshBasicMaterial({ color: side < 0 ? 0xff00ff : 0x00ffff });
-      const trim = new THREE.Mesh(trimGeom, trimMat);
-      trim.position.set(TRACK_LENGTH / 2, -TRACK_LENGTH * 0.07 + barrierH, side * (LANE_HALF + 14));
-      scene.add(trim);
+    // ── White dashed center line ──
+    const dashLen = 80, dashGap = 60;
+    const totalDashes = Math.floor(TRACK_LENGTH / (dashLen + dashGap));
+    for (let d = 0; d < totalDashes; d++) {
+      const dx = d * (dashLen + dashGap) + dashLen / 2;
+      const ty0 = terrainHeight(dx);
+      const dashMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(dashLen, 1.5, 5),
+        new THREE.MeshBasicMaterial({ color: 0xffffff })
+      );
+      dashMesh.position.set(dx, ty0 + 0.8, 0);
+      scene.add(dashMesh);
     }
 
-    // ── Ramps (glowing chevrons) ──
+    // ── Curb / kerb strips on edges ──
+    for (const side of [-1, 1]) {
+      const curbGeom = new THREE.BoxGeometry(TRACK_LENGTH, 8, 16);
+      const curbMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
+      const curb = new THREE.Mesh(curbGeom, curbMat);
+      curb.position.set(TRACK_LENGTH / 2, -TRACK_LENGTH * 0.07 + 4, side * (LANE_HALF + 8));
+      scene.add(curb);
+      // Red/white striped kerb pattern
+      for (let k = 0; k < 40; k++) {
+        if (k % 2 === 0) continue;
+        const kx = k * (TRACK_LENGTH / 40) + TRACK_LENGTH / 80;
+        const kMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(TRACK_LENGTH / 40 - 4, 9, 17),
+          new THREE.MeshLambertMaterial({ color: 0xee2222 })
+        );
+        kMesh.position.set(kx, -TRACK_LENGTH * 0.07 + 4, side * (LANE_HALF + 8));
+        scene.add(kMesh);
+      }
+    }
+
+    // ── Park fence along the grass edges ──
+    const postMat = new THREE.MeshLambertMaterial({ color: 0xf5f0e8 });
+    const railMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    for (let i = 0; i < 55; i++) {
+      const fx = i * 130;
+      for (const side of [-1, 1]) {
+        const fty = terrainHeight(fx);
+        const post = new THREE.Mesh(new THREE.BoxGeometry(6, 40, 6), postMat);
+        post.position.set(fx, fty + 20, side * (LANE_HALF + 55));
+        scene.add(post);
+      }
+    }
+    for (const side of [-1, 1]) {
+      for (const railY of [15, 30]) {
+        const rail = new THREE.Mesh(
+          new THREE.BoxGeometry(TRACK_LENGTH, 4, 4),
+          railMat
+        );
+        rail.position.set(TRACK_LENGTH / 2, -TRACK_LENGTH * 0.07 + railY, side * (LANE_HALF + 55));
+        scene.add(rail);
+      }
+    }
+
+    // ── Ramps (speed bumps — yellow painted) ──
     for (const r of RAMPS) {
       const ty = terrainHeight(r.x);
       const rampMesh = new THREE.Mesh(
-        new THREE.BoxGeometry(r.halfWidth * 2, 5, LANE_HALF * 1.8),
-        new THREE.MeshLambertMaterial({ color: 0x0055ff, emissive: 0x0033aa, emissiveIntensity: 0.6 })
+        new THREE.BoxGeometry(r.halfWidth * 2, 6, LANE_HALF * 1.85),
+        new THREE.MeshLambertMaterial({ color: 0xf5c518 })
       );
       rampMesh.position.set(r.x, ty + 4, 0);
       scene.add(rampMesh);
-      // Arrow stripes
-      for (let s = -1; s <= 1; s += 2) {
+      // Black warning stripes
+      for (let s = -3; s <= 3; s++) {
+        if (Math.abs(s) % 2 === 0) continue;
         const stripe = new THREE.Mesh(
-          new THREE.BoxGeometry(12, 6, LANE_HALF * 0.6),
-          new THREE.MeshBasicMaterial({ color: 0x00ffff })
+          new THREE.BoxGeometry(r.halfWidth * 2, 7, 18),
+          new THREE.MeshLambertMaterial({ color: 0x222222 })
         );
-        stripe.position.set(r.x + s * 30, ty + 7, s * LANE_HALF * 0.3);
+        stripe.position.set(r.x, ty + 4, s * (LANE_HALF * 0.28));
         scene.add(stripe);
       }
-      // Light on ramp
-      const rl = new THREE.PointLight(0x0088ff, 2.5, 200);
-      rl.position.set(r.x, ty + 40, 0);
-      scene.add(rl);
     }
 
     // ── Obstacles ──
@@ -309,41 +330,43 @@ export default function ShoppingCart() {
       let mesh: THREE.Object3D;
       if (o.type === 'tree') {
         const g = new THREE.Group();
-        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(5, 7, 28, 7),
-          new THREE.MeshLambertMaterial({ color: 0x3d1a08 }));
-        trunk.position.y = 14;
-        const leaves = new THREE.Mesh(new THREE.ConeGeometry(28, 65, 7),
-          new THREE.MeshLambertMaterial({ color: 0x0a4d1a, emissive: 0x003308, emissiveIntensity: 0.3 }));
-        leaves.position.y = 48;
-        g.add(trunk); g.add(leaves);
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(5, 7, 30, 8),
+          new THREE.MeshLambertMaterial({ color: 0x6b3a0f }));
+        trunk.position.y = 15;
+        // Layered canopy for a rounder park tree look
+        for (let layer = 0; layer < 3; layer++) {
+          const canopy = new THREE.Mesh(
+            new THREE.SphereGeometry(22 - layer * 5, 8, 6),
+            new THREE.MeshLambertMaterial({ color: layer === 0 ? 0x2d8a1e : layer === 1 ? 0x3aa825 : 0x4ec030 })
+          );
+          canopy.position.y = 38 + layer * 14;
+          g.add(canopy);
+        }
+        g.add(trunk);
         mesh = g;
       } else if (o.type === 'shelf') {
-        // Supermarket shelf unit
+        // In a park context: park bench
         const g = new THREE.Group();
-        const frame = new THREE.Mesh(new THREE.BoxGeometry(20, 70, 60),
-          new THREE.MeshLambertMaterial({ color: 0x888899 }));
-        frame.position.y = 35;
-        g.add(frame);
-        // Shelves
-        for (let sh = 0; sh < 3; sh++) {
-          const shelf = new THREE.Mesh(new THREE.BoxGeometry(22, 3, 62),
-            new THREE.MeshLambertMaterial({ color: 0xaaaacc }));
-          shelf.position.set(0, 16 + sh * 20, 0);
-          g.add(shelf);
-          // Colorful product blocks on shelves
-          for (let pr = 0; pr < 4; pr++) {
-            const prodCol = [0xff4444, 0x44ff88, 0xffcc00, 0x4488ff][pr];
-            const prod = new THREE.Mesh(new THREE.BoxGeometry(6, 10, 10),
-              new THREE.MeshLambertMaterial({ color: prodCol, emissive: prodCol, emissiveIntensity: 0.2 }));
-            prod.position.set(2, 22 + sh * 20, -22 + pr * 14);
-            g.add(prod);
-          }
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(55, 5, 22),
+          new THREE.MeshLambertMaterial({ color: 0x8B5E3C }));
+        seat.position.y = 22;
+        g.add(seat);
+        const back = new THREE.Mesh(new THREE.BoxGeometry(55, 20, 4),
+          new THREE.MeshLambertMaterial({ color: 0x8B5E3C }));
+        back.position.set(0, 32, -9);
+        g.add(back);
+        for (const lx of [-22, 22]) {
+          const leg = new THREE.Mesh(new THREE.BoxGeometry(5, 22, 20),
+            new THREE.MeshLambertMaterial({ color: 0x555555 }));
+          leg.position.set(lx, 11, 0);
+          g.add(leg);
         }
         mesh = g;
       } else {
+        // Rock — rounded grey boulder
         mesh = new THREE.Mesh(
-          new THREE.DodecahedronGeometry(20, 0),
-          new THREE.MeshLambertMaterial({ color: 0x4a4a5a })
+          new THREE.DodecahedronGeometry(22, 1),
+          new THREE.MeshLambertMaterial({ color: 0x8a8a7a })
         );
         mesh.position.y = 10;
       }
@@ -353,86 +376,111 @@ export default function ShoppingCart() {
       scene.add(mesh);
     }
 
-    // ── Forklifts ──
+    // ── Forklifts (rebranded as park maintenance vehicles — orange ride-on lawnmowers) ──
     const forkMeshes = forkMeshesRef.current;
     for (const f of FORKLIFTS) {
       const ty = terrainHeight(f.x);
       const g = new THREE.Group();
-      // Body
-      const body = new THREE.Mesh(new THREE.BoxGeometry(35, 30, 22),
-        new THREE.MeshLambertMaterial({ color: 0xffaa00, emissive: 0x885500, emissiveIntensity: 0.3 }));
-      body.position.y = 18;
+      const body = new THREE.Mesh(new THREE.BoxGeometry(40, 24, 26),
+        new THREE.MeshLambertMaterial({ color: 0xff8800 }));
+      body.position.y = 16;
       g.add(body);
-      // Forks
-      for (const fz of [-8, 8]) {
-        const fork = new THREE.Mesh(new THREE.BoxGeometry(30, 3, 4),
-          new THREE.MeshLambertMaterial({ color: 0xcccccc }));
-        fork.position.set(18, 8, fz);
-        g.add(fork);
+      // Blade deck (flat, under the front)
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(36, 6, 28),
+        new THREE.MeshLambertMaterial({ color: 0xcc6600 }));
+      deck.position.set(12, 5, 0);
+      g.add(deck);
+      // Seat
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(14, 6, 16),
+        new THREE.MeshLambertMaterial({ color: 0x222222 }));
+      seat.position.set(-10, 30, 0);
+      g.add(seat);
+      // Steering wheel
+      const wheel = new THREE.Mesh(new THREE.TorusGeometry(6, 1.5, 6, 12),
+        new THREE.MeshLambertMaterial({ color: 0x111111 }));
+      wheel.position.set(-6, 36, 0);
+      wheel.rotation.x = Math.PI / 3;
+      g.add(wheel);
+      // Wheels
+      const wGeom = new THREE.CylinderGeometry(8, 8, 6, 12);
+      const wMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+      for (const [wx, wz] of [[14, 14], [14, -14], [-14, 14], [-14, -14]]) {
+        const wm = new THREE.Mesh(wGeom, wMat);
+        wm.rotation.x = Math.PI / 2;
+        wm.position.set(wx, 8, wz);
+        g.add(wm);
       }
-      // Warning light
-      const warnLight = new THREE.PointLight(0xff6600, 1.5, 80);
-      warnLight.position.set(0, 45, 0);
-      g.add(warnLight);
-      // Stripes
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(37, 6, 24),
-        new THREE.MeshBasicMaterial({ color: 0x000000 }));
-      stripe.position.y = 18;
-      g.add(stripe);
       g.position.set(f.x, ty, (f.zMin + f.zMax) / 2);
       scene.add(g);
       forkMeshes.set(f.id, g);
     }
 
-    // ── Neon signs on barrier walls ──
-    const signTexts = ['SUPERMARKET', 'SPEED ZONE', 'NO BRAKES', 'DANGER', 'FRESH DEALS'];
-    for (let i = 0; i < 10; i++) {
-      const signCanvas = document.createElement('canvas');
-      signCanvas.width = 256; signCanvas.height = 64;
-      const sc = signCanvas.getContext('2d')!;
-      const col = neonColors[i % neonColors.length];
-      const hexCol = '#' + col.toString(16).padStart(6, '0');
-      sc.fillStyle = '#000011';
-      sc.fillRect(0, 0, 256, 64);
-      sc.strokeStyle = hexCol;
-      sc.lineWidth = 3;
-      sc.strokeRect(3, 3, 250, 58);
-      sc.fillStyle = hexCol;
-      sc.font = 'bold 20px monospace';
-      sc.textAlign = 'center';
-      sc.fillText(signTexts[i % signTexts.length], 128, 40);
-      const signTex = new THREE.CanvasTexture(signCanvas);
-      const signMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(100, 25),
-        new THREE.MeshBasicMaterial({ map: signTex, side: THREE.DoubleSide })
-      );
-      const x = 400 + i * 620;
-      const side = i % 2 === 0 ? -1 : 1;
-      const ty = terrainHeight(x);
-      signMesh.position.set(x, ty + 60, side * (LANE_HALF + 5));
-      signMesh.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
-      scene.add(signMesh);
+    // ── Park lamp posts every 500 units ──
+    for (let i = 0; i < 15; i++) {
+      const lx = 300 + i * 460;
+      const lside = i % 2 === 0 ? -1 : 1;
+      const lty = terrainHeight(lx);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 90, 8),
+        new THREE.MeshLambertMaterial({ color: 0x2a2a2a }));
+      pole.position.set(lx, lty + 45, lside * (LANE_HALF + 50));
+      scene.add(pole);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(7, 8, 6),
+        new THREE.MeshLambertMaterial({ color: 0xffffcc, emissive: 0xffeeaa, emissiveIntensity: 0.5 }));
+      lamp.position.set(lx, lty + 93, lside * (LANE_HALF + 50));
+      scene.add(lamp);
     }
 
-    // ── Pickup meshes (glowing turbo crates) ──
+    // ── Dense park trees outside the fence ──
+    for (let i = 0; i < 80; i++) {
+      const x = Math.random() * TRACK_LENGTH;
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const z = side * (LANE_HALF + 90 + Math.random() * 350);
+      const tx = terrainHeight(x);
+      const tsize = 18 + Math.random() * 14;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(4, 5, 26, 7),
+        new THREE.MeshLambertMaterial({ color: 0x6b3a0f }));
+      trunk.position.set(x, tx + 13, z);
+      scene.add(trunk);
+      const leafCol = [0x2d8a1e, 0x3aa825, 0x4db82a, 0x5cc936][Math.floor(Math.random() * 4)];
+      const canopy = new THREE.Mesh(new THREE.SphereGeometry(tsize, 7, 5),
+        new THREE.MeshLambertMaterial({ color: leafCol }));
+      canopy.position.set(x, tx + 36 + tsize * 0.5, z);
+      scene.add(canopy);
+    }
+
+    // ── Flower patches along the grass ──
+    for (let i = 0; i < 60; i++) {
+      const fx = 200 + Math.random() * (TRACK_LENGTH - 200);
+      const fside = Math.random() < 0.5 ? -1 : 1;
+      const fz = fside * (LANE_HALF + 20 + Math.random() * 30);
+      const fty = terrainHeight(fx);
+      const flowerColors = [0xff4488, 0xff88cc, 0xffff44, 0xffffff, 0xff6622];
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 10, 4),
+        new THREE.MeshLambertMaterial({ color: 0x4ec030 }));
+      stem.position.set(fx, fty + 5, fz);
+      scene.add(stem);
+      const petal = new THREE.Mesh(new THREE.SphereGeometry(5, 6, 4),
+        new THREE.MeshLambertMaterial({ color: flowerColors[i % flowerColors.length] }));
+      petal.position.set(fx, fty + 11, fz);
+      scene.add(petal);
+    }
+
+    // ── Pickup meshes (golden star coins — bright & friendly) ──
     const pickupMeshes = new Map<string, THREE.Mesh>();
     for (const p of PICKUPS) {
       const ty = terrainHeight(p.x);
       const m = new THREE.Mesh(
-        new THREE.OctahedronGeometry(14, 0),
-        new THREE.MeshLambertMaterial({ color: 0xff6600, emissive: 0xff3300, emissiveIntensity: 0.8 })
+        new THREE.OctahedronGeometry(13, 0),
+        new THREE.MeshLambertMaterial({ color: 0xffdd00, emissive: 0xffaa00, emissiveIntensity: 0.6 })
       );
       m.position.set(p.x, ty + 28, p.z);
       scene.add(m);
-      const pLight = new THREE.PointLight(0xff4400, 1.8, 100);
-      pLight.position.set(p.x, ty + 28, p.z);
-      scene.add(pLight);
       pickupMeshes.set(p.id, m);
     }
 
     // ── Finish gate ──
     const fy = terrainHeight(FINISH_X);
-    const gateMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+    const gateMat = new THREE.MeshLambertMaterial({ color: 0xf5c518 });
     for (const zs of [-LANE_HALF, LANE_HALF]) {
       const post = new THREE.Mesh(new THREE.BoxGeometry(8, 180, 8), gateMat);
       post.position.set(FINISH_X, fy + 90, zs);
@@ -718,14 +766,6 @@ export default function ShoppingCart() {
       m.position.y = m.userData.baseY + Math.sin(now / 220) * 4;
     }
 
-    // Update forklift light flicker
-    for (const g of forkMeshesRef.current.values()) {
-      g.traverse(obj => {
-        if (obj instanceof THREE.PointLight) {
-          obj.intensity = 1.2 + Math.sin(now / 300) * 0.5;
-        }
-      });
-    }
 
     // Get latest snapshot
     const lastSnap = snapshotsRef.current[snapshotsRef.current.length - 1];
