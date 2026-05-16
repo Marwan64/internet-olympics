@@ -46,12 +46,9 @@ function Particle({ delay, color }: { delay: number; color: string }) {
 
 const PARTICLE_COLORS = ['#7C3AED', '#06B6D4', '#EC4899', '#F59E0B', '#10B981'];
 const GAMES_SHOWCASE = [
-  { emoji: '⌨️', name: 'Speed Typing Chaos', desc: 'Type faster than your friends... while everything falls apart', color: '#06B6D4' },
-  { emoji: '🧠', name: 'Real or Fake?', desc: 'Can you spot the AI-generated fake facts from the real ones?', color: '#EC4899' },
-  { emoji: '⚽', name: 'Physics Soccer', desc: 'Ragdoll chaos. Everyone slides everywhere. Nobody knows the rules.', color: '#F59E0B' },
-  { emoji: '🎨', name: 'Chaotic Drawing', desc: 'Draw. Let AI guess. Laugh at the results.', color: '#7C3AED' },
-  { emoji: '🖼️', name: 'Guess the AI Image', desc: 'Absurd images. Weirder prompts. You all lose anyway.', color: '#10B981' },
-  { emoji: '🎵', name: 'Sound Mimic', desc: 'Make noises. Get voted. Deeply regret your choices.', color: '#EF4444' },
+  { emoji: '🍄', name: 'Mario Race', desc: 'Race to the pipe. Stomp Goombas. Grab power-ups. First in wins.', color: '#EF4444' },
+  { emoji: '👊', name: 'Knockback Arena', desc: 'Punch and dash everyone off the platforms. Last one standing wins.', color: '#7C3AED' },
+  { emoji: '🛒', name: 'Shopping Cart Racing', desc: 'Bumpy side-scrolling race. Grab turbos, avoid bananas, reach the flag.', color: '#F59E0B' },
 ];
 
 const CHAOS_ANNOUNCEMENTS = [

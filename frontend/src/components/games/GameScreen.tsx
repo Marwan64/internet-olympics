@@ -2,10 +2,9 @@
 
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGameStore, useGameState, useActiveChaos } from '@/store/gameStore';
-import SpeedTypingGame from './SpeedTypingGame';
-import FakeTriviaGame from './FakeTriviaGame';
 import MarioGame from './MarioGame';
 import KnockbackArena from './KnockbackArena';
+import ShoppingCart from './ShoppingCart';
 import { useSocketActions } from '@/hooks/useSocket';
 import { ChaosAnnouncement, ChaosFlash, DiscoFilter } from '@/components/ui/ChaosOverlay';
 import ToastContainer from '@/components/ui/ToastContainer';
@@ -178,12 +177,9 @@ function GameResultsScreen() {
 
 function GameIntroScreen({ gameState }: { gameState: GameState }) {
   const gameNames: Record<string, { name: string; emoji: string; desc: string }> = {
-    'speed-typing': { name: 'Speed Typing Chaos', emoji: '⌨️', desc: 'Type the word shown. Space or Enter to submit. Don\'t break your combo!' },
-    'fake-trivia': { name: 'Real or Fake?', emoji: '🧠', desc: 'Spot the AI-generated fake facts. Trust nobody.' },
     'mario-race': { name: 'Mario Race!', emoji: '🍄', desc: 'Race to the 🏁 pipe! Stomp Goombas, hit ? blocks, use power-ups. First one in wins!' },
     'knockback-arena': { name: 'Knockback Arena', emoji: '👊', desc: 'Punch and dash everyone off the platforms. Last one standing wins.' },
-    'drawing': { name: 'Chaotic Drawing', emoji: '🎨', desc: 'Draw. Laugh. Regret.' },
-    'physics-soccer': { name: 'Physics Soccer', emoji: '⚽', desc: 'Ragdoll physics. Pure chaos.' },
+    'shopping-cart-racing': { name: 'Shopping Cart Racing', emoji: '🛒', desc: 'Bumpy side-scrolling race. Grab turbos, avoid bananas, reach the flag first!' },
   };
 
   const info = gameNames[gameState.type] ?? { name: gameState.type, emoji: '🎮', desc: 'Get ready!' };
@@ -306,11 +302,10 @@ export default function GameScreen() {
                 </motion.div>
               ) : (
                 <motion.div key={`game-${gameState.type}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  {gameState.type === 'speed-typing' && <SpeedTypingGame />}
-                  {gameState.type === 'fake-trivia' && <FakeTriviaGame />}
                   {gameState.type === 'mario-race' && <MarioGame />}
                   {gameState.type === 'knockback-arena' && <KnockbackArena />}
-                  {!['speed-typing', 'fake-trivia', 'mario-race', 'knockback-arena'].includes(gameState.type) && (
+                  {gameState.type === 'shopping-cart-racing' && <ShoppingCart />}
+                  {!['mario-race', 'knockback-arena', 'shopping-cart-racing'].includes(gameState.type) && (
                     <div className="flex items-center justify-center h-64 text-white/50 text-xl">
                       Coming soon: {gameState.type} 🚧
                     </div>

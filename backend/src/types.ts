@@ -51,14 +51,9 @@ export interface ChatMessage {
 }
 
 export type GameType =
-  | 'speed-typing'
-  | 'fake-trivia'
   | 'mario-race'
   | 'knockback-arena'
-  | 'drawing'
-  | 'physics-soccer'
-  | 'ai-image-guess'
-  | 'sound-mimic';
+  | 'shopping-cart-racing';
 
 export type RoomStatus =
   | 'lobby' | 'countdown' | 'intro' | 'playing' | 'results' | 'podium' | 'ended';

@@ -2,10 +2,9 @@ import { Server } from 'socket.io';
 import { GameType, GameResults } from '../types';
 import { RoomManager } from './RoomManager';
 import { BaseGame, GameConfig } from '../games/BaseGame';
-import { SpeedTypingGame } from '../games/SpeedTyping';
-import { FakeTriviaGame } from '../games/FakeTrivia';
 import { MarioGame } from '../games/MarioGame';
 import { KnockbackArena } from '../games/KnockbackArena';
+import { ShoppingCart } from '../games/ShoppingCart';
 import { logger } from '../utils/logger';
 
 // ── Game Registry ──────────────────────────────────────────────────────────────
@@ -13,14 +12,9 @@ import { logger } from '../utils/logger';
 type GameConstructor = new (io: Server, config: GameConfig, prevScores: Record<string, number>) => BaseGame;
 
 const GAME_REGISTRY: Record<GameType, GameConstructor> = {
-  'speed-typing': SpeedTypingGame,
-  'fake-trivia': FakeTriviaGame,
   'mario-race': MarioGame,
   'knockback-arena': KnockbackArena,
-  'drawing': SpeedTypingGame,
-  'physics-soccer': SpeedTypingGame,
-  'ai-image-guess': FakeTriviaGame,
-  'sound-mimic': FakeTriviaGame,
+  'shopping-cart-racing': ShoppingCart,
 };
 
 // ── Manager ────────────────────────────────────────────────────────────────────

@@ -316,10 +316,9 @@ export default function LobbyRoom() {
                   <div key={idx} className="flex items-center gap-2 text-sm">
                     <span className="text-white/30 font-mono text-xs w-4">{idx + 1}.</span>
                     <span className="text-white/70">
-                      {game === 'speed-typing' ? '⌨️ Speed Typing Chaos' :
-                       game === 'fake-trivia' ? '🧠 Real or Fake?' :
-                       game === 'drawing' ? '🎨 Drawing Contest' :
-                       game === 'physics-soccer' ? '⚽ Physics Soccer' :
+                      {game === 'mario-race' ? '🍄 Mario Race' :
+                       game === 'knockback-arena' ? '👊 Knockback Arena' :
+                       game === 'shopping-cart-racing' ? '🛒 Shopping Cart Racing' :
                        '🎮 ' + game}
                     </span>
                   </div>
