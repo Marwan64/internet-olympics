@@ -77,6 +77,8 @@ export default function ShoppingCart() {
   const finishMsgRef = useRef('');
   const lastInputRef = useRef({ accel: false, brake: false, left: false, right: false });
   const inputRef = useRef({ accel: false, brake: false, left: false, right: false });
+  const lastFrameTimeRef = useRef<number>(0);
+  const smoothLookRef = useRef({ x: 0, y: 0, z: 0 });
   const sceneStateRef = useRef<{
     renderer: THREE.WebGLRenderer;
     scene: THREE.Scene;
@@ -540,19 +542,33 @@ export default function ShoppingCart() {
     }
 
     // Camera follows local player
+    // Delta-time for frame-rate-independent smoothing
+    const dt = lastFrameTimeRef.current > 0
+      ? Math.min((now - lastFrameTimeRef.current) / 1000, 0.05)
+      : 1 / 60;
+    lastFrameTimeRef.current = now;
+
     const own = ownServerRef.current;
     if (own) {
       const ty = terrainHeight(own.x);
       const targetCamX = own.x - 130;
       const targetCamY = ty + 80;
       const targetCamZ = own.z * 0.3;
-      camera.position.x += (targetCamX - camera.position.x) * 0.12;
-      camera.position.y += (targetCamY - camera.position.y) * 0.1;
-      camera.position.z += (targetCamZ - camera.position.z) * 0.1;
-      const lookX = own.x + 80;
-      const lookY = ty + 10;
-      const lookZ = own.z * 0.5;
-      camera.lookAt(lookX, lookY, lookZ);
+
+      // Exponential decay: frame-rate independent. kXZ ~8%/frame @ 60fps, kY ~3.3%/frame (absorbs terrain bumps)
+      const kXZ = 1 - Math.exp(-5 * dt);
+      const kY  = 1 - Math.exp(-2 * dt);
+
+      camera.position.x += (targetCamX - camera.position.x) * kXZ;
+      camera.position.y += (targetCamY - camera.position.y) * kY;
+      camera.position.z += (targetCamZ - camera.position.z) * kXZ;
+
+      // Smooth lookAt target so it doesn't snap with terrain
+      const sm = smoothLookRef.current;
+      sm.x += (own.x + 80 - sm.x) * kXZ;
+      sm.y += (ty + 10 - sm.y) * kY;
+      sm.z += (own.z * 0.5 - sm.z) * kXZ;
+      camera.lookAt(sm.x, sm.y, sm.z);
     }
 
     renderer.render(scene, camera);
