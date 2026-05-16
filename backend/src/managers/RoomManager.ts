@@ -251,11 +251,20 @@ export class RoomManager {
     if (!internal) return;
 
     for (const p of internal.room.players) {
-      const gained = scoresByPlayerId[p.id] ?? 0;
+      // Game results are keyed by socketId, not player UUID
+      const gained = scoresByPlayerId[p.socketId] ?? 0;
       p.roundScore = gained;
       p.score += gained;
     }
     internal.lastActivity = Date.now();
+  }
+
+  updatePlaylist(roomId: string, playlist: GameType[]): Room | null {
+    const internal = this.rooms.get(roomId);
+    if (!internal || internal.room.status !== 'lobby') return null;
+    internal.room.gamePlaylist = playlist.slice(0, 6);
+    internal.lastActivity = Date.now();
+    return internal.room;
   }
 
   addChatMessage(socketId: string, message: string): ChatMessage | null {

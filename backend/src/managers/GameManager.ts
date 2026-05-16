@@ -198,9 +198,11 @@ export class GameManager {
 
     this.roomManager.setRoomStatus(roomId, 'podium');
 
-    // Build final leaderboard
+    // Use cumulativeScores (keyed by socketId) as the authoritative totals.
+    // p.score on the Room object was buggy (keyed mismatch), so we bypass it here.
+    const cum = state.cumulativeScores;
     const sortedPlayers = [...room.players].sort(
-      (a, b) => b.score - a.score
+      (a, b) => (cum[b.socketId] ?? 0) - (cum[a.socketId] ?? 0)
     );
 
     const awards = this.calculateAwards(sortedPlayers, state.gameHistory);
@@ -211,8 +213,8 @@ export class GameManager {
         username: p.username,
         avatar: p.avatar,
         color: p.color,
-        roundScore: p.roundScore,
-        totalScore: p.score,
+        roundScore: cum[p.socketId] ?? 0,
+        totalScore: cum[p.socketId] ?? 0,
         rank: idx + 1,
         stats: {},
       })),
@@ -223,7 +225,7 @@ export class GameManager {
         avatar: sortedPlayers[0]?.avatar ?? '',
         color: sortedPlayers[0]?.color ?? '',
         roundScore: 0,
-        totalScore: sortedPlayers[0]?.score ?? 0,
+        totalScore: cum[sortedPlayers[0]?.socketId ?? ''] ?? 0,
         rank: 1,
         stats: {},
       },

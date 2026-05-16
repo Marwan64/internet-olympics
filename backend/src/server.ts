@@ -171,6 +171,22 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ── Lobby: Set Playlist (host only) ─────────────────────────────────────
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (socket as any).on('lobby:set_playlist', (playlist: unknown) => {
+    if (!roomManager.isHost(socket.id)) return;
+    if (!Array.isArray(playlist) || playlist.length < 1 || playlist.length > 6) return;
+    const validGames = ['mario-race','knockback-arena','shopping-cart-racing','rage-obby','floor-is-lava','physics-soccer'];
+    const clean = (playlist as string[]).filter(g => validGames.includes(g));
+    if (clean.length === 0) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = roomManager.getPlayerBySocket(socket.id);
+    if (!data) return;
+    const updated = roomManager.updatePlaylist(data.room.id, clean as import('./types').GameType[]);
+    if (updated) io.to(updated.id).emit('lobby:updated', updated);
+  });
+
   // ── Lobby: Chat ──────────────────────────────────────────────────────────
 
   socket.on('lobby:chat', (message: string) => {

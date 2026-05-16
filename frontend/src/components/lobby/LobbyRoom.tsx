@@ -4,8 +4,176 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/store/gameStore';
 import { useSocketActions, getSocket } from '@/hooks/useSocket';
-import { Player, ChatMessage } from '@/types';
+import { Player, ChatMessage, GameType } from '@/types';
 import ToastContainer from '@/components/ui/ToastContainer';
+
+// ── Game metadata ─────────────────────────────────────────────────────────────
+
+const ALL_GAMES: { type: GameType; emoji: string; name: string }[] = [
+  { type: 'mario-race',           emoji: '🍄', name: 'Mario Race' },
+  { type: 'knockback-arena',      emoji: '👊', name: 'Knockback Arena' },
+  { type: 'shopping-cart-racing', emoji: '🛒', name: 'Shopping Cart' },
+  { type: 'rage-obby',            emoji: '😤', name: 'Rage Obby' },
+  { type: 'floor-is-lava',        emoji: '🌋', name: 'Floor is Lava' },
+  { type: 'physics-soccer',       emoji: '⚽', name: 'Physics Soccer' },
+];
+
+function gameLabel(type: GameType): string {
+  return ALL_GAMES.find(g => g.type === type)?.emoji + ' ' + (ALL_GAMES.find(g => g.type === type)?.name ?? type);
+}
+
+function randomPlaylist(count: number): GameType[] {
+  const shuffled = [...ALL_GAMES].sort(() => Math.random() - 0.5).map(g => g.type);
+  return shuffled.slice(0, Math.min(count, ALL_GAMES.length));
+}
+
+// ── Game Picker (host only) ───────────────────────────────────────────────────
+
+function GamePicker({ playlist, isHost }: { playlist: GameType[]; isHost: boolean }) {
+  const [mode, setMode] = useState<'random' | 'custom'>('random');
+  const [randomCount, setRandomCount] = useState(playlist.length || 3);
+  const [selected, setSelected] = useState<GameType[]>(playlist);
+
+  // sync when room playlist changes externally
+  useEffect(() => { setSelected(playlist); }, [playlist.join(',')]); // eslint-disable-line
+
+  function emitPlaylist(pl: GameType[]) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (getSocket() as any).emit('lobby:set_playlist', pl);
+  }
+
+  function handleRandomCount(n: number) {
+    setRandomCount(n);
+    emitPlaylist(randomPlaylist(n));
+  }
+
+  function handleRandomReroll() {
+    emitPlaylist(randomPlaylist(randomCount));
+  }
+
+  function toggleGame(type: GameType) {
+    let next: GameType[];
+    if (selected.includes(type)) {
+      if (selected.length <= 1) return; // must have at least 1
+      next = selected.filter(g => g !== type);
+    } else {
+      if (selected.length >= 6) return;
+      next = [...selected, type];
+    }
+    setSelected(next);
+    emitPlaylist(next);
+  }
+
+  function switchMode(m: 'random' | 'custom') {
+    setMode(m);
+    if (m === 'random') {
+      emitPlaylist(randomPlaylist(randomCount));
+    } else {
+      setSelected(playlist.length ? playlist : [ALL_GAMES[0].type]);
+    }
+  }
+
+  if (!isHost) {
+    return (
+      <div className="space-y-1.5">
+        {playlist.map((game, idx) => (
+          <div key={idx} className="flex items-center gap-2 text-sm">
+            <span className="text-white/30 font-mono text-xs w-4">{idx + 1}.</span>
+            <span className="text-white/70">{gameLabel(game)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Mode toggle */}
+      <div className="flex gap-1 p-0.5 rounded-xl bg-white/5">
+        {(['random', 'custom'] as const).map(m => (
+          <button
+            key={m}
+            onClick={() => switchMode(m)}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all capitalize ${
+              mode === m ? 'bg-brand-purple text-white' : 'text-white/50 hover:text-white'
+            }`}
+          >
+            {m === 'random' ? '🎲 Random' : '✏️ Custom'}
+          </button>
+        ))}
+      </div>
+
+      {mode === 'random' ? (
+        <div className="space-y-2">
+          <p className="text-white/40 text-xs">How many games?</p>
+          <div className="flex gap-1">
+            {[1, 2, 3, 4, 5, 6].map(n => (
+              <button
+                key={n}
+                onClick={() => handleRandomCount(n)}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  randomCount === n
+                    ? 'bg-brand-purple text-white'
+                    : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={handleRandomReroll}
+            className="w-full py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white bg-white/5 hover:bg-white/10 transition-all"
+          >
+            🔀 Re-roll
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          <p className="text-white/40 text-xs">Pick 1–6 games (in order):</p>
+          <div className="grid grid-cols-2 gap-1.5">
+            {ALL_GAMES.map(g => {
+              const on = selected.includes(g.type);
+              const idx = selected.indexOf(g.type);
+              return (
+                <button
+                  key={g.type}
+                  onClick={() => toggleGame(g.type)}
+                  className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-xs font-bold transition-all text-left ${
+                    on
+                      ? 'bg-brand-purple/30 border border-brand-purple/60 text-white'
+                      : 'bg-white/5 border border-white/10 text-white/40 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <span className="text-base">{g.emoji}</span>
+                  <span className="flex-1 leading-tight">{g.name}</span>
+                  {on && (
+                    <span className="w-4 h-4 rounded-full bg-brand-purple flex items-center justify-center text-[9px] font-black shrink-0">
+                      {idx + 1}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {selected.length === 0 && <p className="text-red-400 text-xs">Select at least 1 game</p>}
+        </div>
+      )}
+
+      {/* Current playlist preview */}
+      <div className="pt-1 border-t border-white/10">
+        <p className="text-white/30 text-xs mb-1">Playlist preview:</p>
+        <div className="flex flex-wrap gap-1">
+          {playlist.map((g, i) => (
+            <span key={i} className="text-xs bg-white/10 rounded-lg px-2 py-0.5 text-white/60">
+              {i + 1}. {gameLabel(g)}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── QR Code Component (lazy) ──────────────────────────────────────────────────
 
@@ -310,20 +478,10 @@ export default function LobbyRoom() {
               transition={{ delay: 0.15 }}
               className="glass rounded-xl p-4"
             >
-              <p className="text-white/50 text-xs uppercase tracking-wider mb-3 font-mono">Game Playlist</p>
-              <div className="space-y-2">
-                {room.gamePlaylist.map((game, idx) => (
-                  <div key={idx} className="flex items-center gap-2 text-sm">
-                    <span className="text-white/30 font-mono text-xs w-4">{idx + 1}.</span>
-                    <span className="text-white/70">
-                      {game === 'mario-race' ? '🍄 Mario Race' :
-                       game === 'knockback-arena' ? '👊 Knockback Arena' :
-                       game === 'shopping-cart-racing' ? '🛒 Shopping Cart Racing' :
-                       '🎮 ' + game}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <p className="text-white/50 text-xs uppercase tracking-wider mb-3 font-mono">
+                {isHost ? '🎮 Game Picker' : '🎮 Game Playlist'}
+              </p>
+              <GamePicker playlist={room.gamePlaylist} isHost={isHost} />
             </motion.div>
           </div>
 
