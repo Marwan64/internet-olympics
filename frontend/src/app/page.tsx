@@ -46,9 +46,11 @@ function Particle({ delay, color }: { delay: number; color: string }) {
 
 const PARTICLE_COLORS = ['#7C3AED', '#06B6D4', '#EC4899', '#F59E0B', '#10B981'];
 const GAMES_SHOWCASE = [
-  { emoji: '🍄', name: 'Mario Race', desc: 'Race to the pipe. Stomp Goombas. Grab power-ups. First in wins.', color: '#EF4444' },
-  { emoji: '👊', name: 'Knockback Arena', desc: 'Punch and dash everyone off the platforms. Last one standing wins.', color: '#7C3AED' },
-  { emoji: '🛒', name: 'Shopping Cart Racing', desc: 'Bumpy side-scrolling race. Grab turbos, avoid bananas, reach the flag.', color: '#F59E0B' },
+  { emoji: '🍄', name: 'Mario Race', desc: 'Race to the pipe. Stomp Goombas. Grab power-ups. First in wins.', color: '#EF4444', dur: '60s' },
+  { emoji: '👊', name: 'Knockback Arena', desc: 'Punch and dash everyone off the platforms. Last one standing wins.', color: '#7C3AED', dur: '60s' },
+  { emoji: '🛒', name: 'Shopping Cart Racing', desc: 'Bumpy downhill race. Grab turbos, dodge trees, reach the flag first.', color: '#F59E0B', dur: '60s' },
+  { emoji: '😤', name: 'Rage Obby', desc: 'Jump across platforms, dodge spikes, ride moving ledges. Die → respawn at checkpoint.', color: '#10B981', dur: '90s' },
+  { emoji: '🌋', name: 'Floor is Lava', desc: 'Rising lava swallows the tower. Climb higher, survive longer. Last one alive wins.', color: '#F97316', dur: '90s' },
 ];
 
 const CHAOS_ANNOUNCEMENTS = [
@@ -60,6 +62,9 @@ const CHAOS_ANNOUNCEMENTS = [
   '✨ DISCO MODE!',
   '🪞 MIRROR MIRROR!',
   '🤯 ULTRA CHAOS!',
+  '🌋 LAVA SURGE! IT RISES FASTER!',
+  '🧊 ICY FLOORS! NO GRIP!',
+  '💥 PLATFORMS COLLAPSING!',
 ];
 
 // ── Main Home Screen ──────────────────────────────────────────────────────────
@@ -280,9 +285,9 @@ function HomeContent() {
           viewport={{ once: true }}
           className="font-display font-bold text-3xl sm:text-4xl text-center text-white mb-3"
         >
-          6 Games. All Chaos.
+          5 Games. All Chaos.
         </motion.h2>
-        <p className="text-center text-white/50 mb-10">Rounds last 30-90 seconds. No boring downtime.</p>
+        <p className="text-center text-white/50 mb-10">Rounds last 60-90 seconds. No boring downtime.</p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {GAMES_SHOWCASE.map((game, idx) => (
@@ -293,18 +298,22 @@ function HomeContent() {
               viewport={{ once: true }}
               transition={{ delay: idx * 0.08 }}
               whileHover={{ y: -4, scale: 1.01 }}
-              className="glass rounded-2xl p-6 cursor-default group"
+              className="glass rounded-2xl p-6 cursor-default group relative overflow-hidden"
               style={{ borderColor: `${game.color}30` }}
             >
+              <div className="absolute top-0 right-0 w-24 h-24 rounded-full pointer-events-none opacity-10"
+                style={{ background: `radial-gradient(circle, ${game.color} 0%, transparent 70%)`, transform: 'translate(30%, -30%)' }} />
               <div className="text-4xl mb-3">{game.emoji}</div>
-              <h3 className="font-display font-bold text-white text-lg mb-2 group-hover:text-opacity-90"
+              <h3 className="font-display font-bold text-lg mb-2"
                 style={{ color: game.color }}>
                 {game.name}
               </h3>
               <p className="text-white/50 text-sm leading-relaxed">{game.desc}</p>
-              <div className="mt-4 text-xs font-mono"
-                style={{ color: `${game.color}80` }}>
-                ▶ 30-60s rounds
+              <div className="mt-4 flex items-center gap-2">
+                <span className="text-xs font-mono px-2 py-0.5 rounded-full"
+                  style={{ background: `${game.color}20`, color: `${game.color}cc` }}>
+                  ▶ {game.dur} rounds
+                </span>
               </div>
             </motion.div>
           ))}
