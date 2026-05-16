@@ -64,42 +64,53 @@ function buildScene(scene: THREE.Scene) {
 
   // Goals (left = blue scores, right = red scores)
   const goalDepth = 2.5;
+  const postMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.6 });
   for (const side of [-1, 1]) {
-    const teamIdx = side === -1 ? 1 : 0; // left goal → blue scores → red defends
-    const color   = TEAM_COLOR[teamIdx === 0 ? 1 : 0]; // net colour of the attacking team
-    const goalX   = side * (AW / 2 + goalDepth / 2);
+    const teamIdx = side === -1 ? 1 : 0;
+    const color   = TEAM_COLOR[teamIdx === 0 ? 1 : 0];
+    const gxFace  = side * AW / 2;                      // goal-line x (front face)
+    const gxBack  = side * (AW / 2 + goalDepth);        // back-net x
 
-    // Net back
-    const net = new THREE.Mesh(
-      new THREE.PlaneGeometry(goalDepth, GW),
-      new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+    // Back net — vertical plane, normal faces along X axis
+    const backNet = new THREE.Mesh(
+      new THREE.PlaneGeometry(GW, 2.4),
+      new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.45, side: THREE.DoubleSide })
     );
-    net.rotation.y = Math.PI / 2;
-    net.rotation.x = -Math.PI / 2;
-    net.position.set(goalX, 0.01, 0);
-    net.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
-    scene.add(net);
+    backNet.rotation.y = Math.PI / 2;                   // PlaneGeometry is XY; rotate Y so normal faces X
+    backNet.position.set(gxBack, 1.2, 0);
+    scene.add(backNet);
 
-    // Goal posts
+    // Side nets — vertical planes at z = ±GW/2, spanning the goal depth
+    for (const zs of [-1, 1]) {
+      const sideNet = new THREE.Mesh(
+        new THREE.PlaneGeometry(goalDepth, 2.4),
+        new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.25, side: THREE.DoubleSide })
+      );
+      // No Y rotation: XY plane faces Z direction — correct for side walls
+      sideNet.position.set(gxFace + side * goalDepth / 2, 1.2, zs * GW / 2);
+      scene.add(sideNet);
+    }
+
+    // Goal posts — vertical cylinders at z = ±GW/2 on the goal line
     for (const zs of [-1, 1]) {
       const post = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.15, 0.15, 2, 8),
-        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.5 })
+        new THREE.CylinderGeometry(0.15, 0.15, 2.4, 10),
+        postMat
       );
-      post.position.set(side * AW / 2, 1, zs * GW / 2);
+      post.position.set(gxFace, 1.2, zs * GW / 2);
       scene.add(post);
     }
-    // Crossbar
+
+    // Crossbar — cylinder spanning Z axis between the two posts
     const bar = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.12, 0.12, GW + 0.3, 8),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.5 })
+      new THREE.CylinderGeometry(0.12, 0.12, GW + 0.3, 10),
+      postMat
     );
-    bar.rotation.z = Math.PI / 2;
-    bar.rotation.x = Math.PI / 2;
-    bar.position.set(side * AW / 2, 2, 0);
+    bar.rotation.x = Math.PI / 2;                       // rotate Y-up cylinder to lie along Z
+    bar.position.set(gxFace, 2.4, 0);
     scene.add(bar);
 
-    // Goal zone tint on pitch
+    // Goal zone tint on pitch (inside field)
     const zone = new THREE.Mesh(
       new THREE.PlaneGeometry(4, GW),
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.12, side: THREE.DoubleSide })
@@ -180,6 +191,12 @@ export default function PhysicsSoccer() {
   const { sendInput } = useSocketActions();
   const mySocketId = useRef<string>('');
 
+  // ── Mobile touch input refs (readable inside the game loop) ───────────────
+  const touchJoyRef  = useRef({ dx: 0, dz: 0 });
+  const touchDashRef = useRef(false);
+  const joyOriginRef = useRef({ x: 0, y: 0 });
+  const [joyVisual, setJoyVisual] = useState({ x: 0, y: 0 });
+
   // ── HUD state ──────────────────────────────────────────────────────────────
   const [score, setScore]         = useState<[number, number]>([0, 0]);
   const [myTeam, setMyTeam]       = useState<0 | 1 | null>(null);
@@ -222,11 +239,10 @@ export default function PhysicsSoccer() {
     sun.shadow.camera.left = -30; sun.shadow.camera.right  = 30;
     sun.shadow.camera.top  =  20; sun.shadow.camera.bottom = -20;
     scene.add(sun);
-    scene.add(new THREE.PointLight(0x60a5fa, 1.5, 30).position.set(-20, 4, 0) && new THREE.PointLight(0x60a5fa, 1.5, 30));
-    const blueGoalLight = new THREE.PointLight(0x3b82f6, 2, 18);
+    const blueGoalLight = new THREE.PointLight(0x3b82f6, 2.5, 22);
     blueGoalLight.position.set(-20, 3, 0);
     scene.add(blueGoalLight);
-    const redGoalLight = new THREE.PointLight(0xef4444, 2, 18);
+    const redGoalLight = new THREE.PointLight(0xef4444, 2.5, 22);
     redGoalLight.position.set(20, 3, 0);
     scene.add(redGoalLight);
 
@@ -399,7 +415,9 @@ export default function PhysicsSoccer() {
       // ── Client-side player prediction ────────────────────────────────────
       const phase = useGameStore.getState().gameState?.phase;
       if (local.assigned && phase === 'playing' && !inReset) {
-        let dx = 0, dz = 0;
+        // Keyboard + touch joystick combined
+        let dx = touchJoyRef.current.dx;
+        let dz = touchJoyRef.current.dz;
         if (keys.w) dz -= 1;
         if (keys.s) dz += 1;
         if (keys.a) dx -= 1;
@@ -407,8 +425,9 @@ export default function PhysicsSoccer() {
         const len = Math.hypot(dx, dz);
         if (len > 0) { dx /= len; dz /= len; }
 
-        // Dash on shift rising edge
-        const isDash = keys.shift && !shiftEdge;
+        // Dash on shift rising edge or touch dash button
+        const isDash = (keys.shift && !shiftEdge) || touchDashRef.current;
+        touchDashRef.current = false; // consume touch dash
         shiftEdge = keys.shift;
 
         if (isDash && now > boostCDUntil) {
@@ -587,9 +606,68 @@ export default function PhysicsSoccer() {
         <span className="text-white/40 text-xs font-mono">SHIFT to dash</span>
       </div>
 
-      {/* Controls hint */}
-      <div className="absolute bottom-4 left-3 text-white/25 text-xs font-mono pointer-events-none select-none">
+      {/* Controls hint (desktop) */}
+      <div className="absolute bottom-4 left-3 text-white/25 text-xs font-mono pointer-events-none select-none hidden sm:block">
         WASD move · SHIFT dash
+      </div>
+
+      {/* Mobile touch controls */}
+      <div className="absolute inset-0 pointer-events-none sm:hidden">
+        {/* Virtual joystick — bottom left */}
+        <div
+          className="absolute pointer-events-auto select-none"
+          style={{ bottom: 20, left: 20, width: 90, height: 90, touchAction: 'none' }}
+          onTouchStart={e => {
+            e.preventDefault();
+            const t = e.changedTouches[0];
+            joyOriginRef.current = { x: t.clientX, y: t.clientY };
+          }}
+          onTouchMove={e => {
+            e.preventDefault();
+            const t = e.changedTouches[0];
+            const rawX = t.clientX - joyOriginRef.current.x;
+            const rawY = t.clientY - joyOriginRef.current.y;
+            const dist = Math.hypot(rawX, rawY);
+            const max = 40;
+            const cX = dist > max ? (rawX / dist) * max : rawX;
+            const cY = dist > max ? (rawY / dist) * max : rawY;
+            touchJoyRef.current = { dx: cX / max, dz: cY / max };
+            setJoyVisual({ x: cX, y: cY });
+          }}
+          onTouchEnd={() => {
+            touchJoyRef.current = { dx: 0, dz: 0 };
+            setJoyVisual({ x: 0, y: 0 });
+          }}
+        >
+          <div style={{
+            width: 90, height: 90, borderRadius: '50%',
+            border: '2px solid rgba(255,255,255,0.25)',
+            background: 'rgba(255,255,255,0.08)',
+            position: 'relative',
+          }}>
+            <div style={{
+              position: 'absolute',
+              width: 38, height: 38, borderRadius: '50%',
+              background: 'rgba(255,255,255,0.45)',
+              border: '2px solid rgba(255,255,255,0.65)',
+              left: `calc(50% - 19px + ${joyVisual.x * 0.55}px)`,
+              top: `calc(50% - 19px + ${joyVisual.y * 0.55}px)`,
+            }} />
+          </div>
+        </div>
+
+        {/* Dash button — bottom right */}
+        <div
+          className="absolute pointer-events-auto select-none flex items-center justify-center"
+          style={{
+            bottom: 20, right: 20, width: 76, height: 76, borderRadius: '50%',
+            background: 'rgba(251,191,36,0.7)', border: '2px solid rgba(251,191,36,0.9)',
+            touchAction: 'none', fontWeight: 900, fontSize: 14, color: '#fff', letterSpacing: 1,
+          }}
+          onTouchStart={e => { e.preventDefault(); touchDashRef.current = true; }}
+        >
+          DASH
+        </div>
       </div>
 
       {/* Chaos label */}

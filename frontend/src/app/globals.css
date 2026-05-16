@@ -136,6 +136,15 @@ body {
   50% { background-position: 100% 50%; }
 }
 
+/* ── Touch / Interactive ─────────────────────────────────────────────────────── */
+
+button, [role="button"], a, label {
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* ── Chaos Overlays ─────────────────────────────────────────────────────────── */
 
 .chaos-shake { animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }

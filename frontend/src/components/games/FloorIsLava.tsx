@@ -139,6 +139,12 @@ export default function FloorIsLava() {
   const playerId   = useGameStore(s => s.playerId);
   const { sendInput } = useSocketActions();
 
+  // ── Mobile touch input refs (readable inside the game loop) ───────────────
+  const touchJoyRef  = useRef({ dx: 0, dz: 0 });
+  const touchJumpRef = useRef(false);
+  const joyOriginRef = useRef({ x: 0, y: 0 });
+  const [joyVisual, setJoyVisual] = useState({ x: 0, y: 0 });
+
   const [eliminated, setEliminated] = useState(false);
   const [aliveCount, setAliveCount] = useState(0);
   const [heightM, setHeightM]       = useState(0);
@@ -466,6 +472,11 @@ export default function FloorIsLava() {
         if (keys.s) { mx += sy; mz += cy2; }
         if (keys.a) { mx -= cy2; mz += sy; }
         if (keys.d) { mx += cy2; mz -= sy; }
+        // Touch joystick (joyDx = strafe, joyDz = forward/back in screen space)
+        const joyForward = -touchJoyRef.current.dz; // screen up (neg Y) = game forward
+        const joyRight   =  touchJoyRef.current.dx;
+        mx += joyForward * (-sy) + joyRight * cy2;
+        mz += joyForward * (-cy2) + joyRight * (-sy);
         const ml = Math.sqrt(mx * mx + mz * mz);
         if (ml > 0) { mx /= ml; mz /= ml; }
 
@@ -487,8 +498,10 @@ export default function FloorIsLava() {
         ps.vel.y -= grav * dt;
         if (ps.vel.y < -MAX_FALL) ps.vel.y = -MAX_FALL;
 
-        // Jump
-        if (keys.space && !spaceWas) {
+        // Jump (keyboard or touch button)
+        const jumpPressed = (keys.space && !spaceWas) || touchJumpRef.current;
+        if (touchJumpRef.current) touchJumpRef.current = false; // consume
+        if (jumpPressed) {
           if (ps.onGround || ps.coyoteMs > 0) {
             ps.vel.y = chaosState.lowGravity ? JUMP_VEL * 1.5 : JUMP_VEL;
             ps.onGround = false;
@@ -720,9 +733,68 @@ export default function FloorIsLava() {
           )}
         </AnimatePresence>
 
-        {/* Controls hint */}
-        <div className="absolute bottom-3 left-3 text-white/25 text-xs font-mono leading-relaxed">
+        {/* Controls hint (desktop) */}
+        <div className="absolute bottom-3 left-3 text-white/25 text-xs font-mono leading-relaxed hidden sm:block">
           WASD move · SPACE jump · SHIFT sprint · Click canvas to lock mouse
+        </div>
+
+        {/* Mobile touch controls */}
+        <div className="absolute inset-0 pointer-events-none sm:hidden">
+          {/* Virtual joystick — bottom left */}
+          <div
+            className="absolute pointer-events-auto select-none"
+            style={{ bottom: 20, left: 20, width: 90, height: 90, touchAction: 'none' }}
+            onTouchStart={e => {
+              e.preventDefault();
+              const t = e.changedTouches[0];
+              joyOriginRef.current = { x: t.clientX, y: t.clientY };
+            }}
+            onTouchMove={e => {
+              e.preventDefault();
+              const t = e.changedTouches[0];
+              const rawX = t.clientX - joyOriginRef.current.x;
+              const rawY = t.clientY - joyOriginRef.current.y;
+              const dist = Math.hypot(rawX, rawY);
+              const max = 40;
+              const cX = dist > max ? (rawX / dist) * max : rawX;
+              const cY = dist > max ? (rawY / dist) * max : rawY;
+              touchJoyRef.current = { dx: cX / max, dz: cY / max };
+              setJoyVisual({ x: cX, y: cY });
+            }}
+            onTouchEnd={() => {
+              touchJoyRef.current = { dx: 0, dz: 0 };
+              setJoyVisual({ x: 0, y: 0 });
+            }}
+          >
+            <div style={{
+              width: 90, height: 90, borderRadius: '50%',
+              border: '2px solid rgba(255,255,255,0.25)',
+              background: 'rgba(255,255,255,0.08)',
+              position: 'relative',
+            }}>
+              <div style={{
+                position: 'absolute',
+                width: 38, height: 38, borderRadius: '50%',
+                background: 'rgba(255,255,255,0.45)',
+                border: '2px solid rgba(255,255,255,0.65)',
+                left: `calc(50% - 19px + ${joyVisual.x * 0.55}px)`,
+                top: `calc(50% - 19px + ${joyVisual.y * 0.55}px)`,
+              }} />
+            </div>
+          </div>
+
+          {/* Jump button — bottom right */}
+          <div
+            className="absolute pointer-events-auto select-none flex items-center justify-center"
+            style={{
+              bottom: 20, right: 20, width: 76, height: 76, borderRadius: '50%',
+              background: 'rgba(251,191,36,0.7)', border: '2px solid rgba(251,191,36,0.9)',
+              touchAction: 'none', fontWeight: 900, fontSize: 14, color: '#fff', letterSpacing: 1,
+            }}
+            onTouchStart={e => { e.preventDefault(); touchJumpRef.current = true; }}
+          >
+            JUMP
+          </div>
         </div>
       </div>
     </div>
