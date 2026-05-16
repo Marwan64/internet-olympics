@@ -72,7 +72,8 @@ export class GameManager {
     const state = this.roomStates.get(data.room.id);
     if (!state?.game) return;
 
-    state.game.handleInput(data.playerId, input);
+    // Pass socketId — game uses socket IDs as player state keys
+    state.game.handleInput(socketId, input);
   }
 
   onGameEnd(roomId: string, results: GameResults): void {
@@ -98,7 +99,7 @@ export class GameManager {
     const enrichedResults = {
       ...results,
       scores: results.scores.map((s) => {
-        const player = room.players.find((p) => p.id === s.playerId);
+        const player = room.players.find((p) => p.socketId === s.playerId);
         return {
           ...s,
           username: player?.username ?? 'Unknown',

@@ -108,6 +108,7 @@ export function useSocket() {
     });
 
     socket.on('game:begin', (state: GameState) => {
+      store.clearGame();
       store.setGameState(state);
       store.setGameCountdown(null);
       store.setScreen('game');

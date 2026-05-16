@@ -260,10 +260,7 @@ export default function SpeedTypingGame() {
         <div className="glass rounded-2xl p-8 w-full max-w-lg text-center relative"
           style={{ border: '1px solid rgba(245,158,11,0.2)', minHeight: '160px' }}>
 
-          {/* Upcoming words (dimmed behind) */}
-          <div className="mb-4">
-            <UpcomingWords words={upcomingWords} />
-          </div>
+          <p className="text-white/40 text-xs uppercase tracking-widest mb-3 font-mono">Type this word ↓</p>
 
           {/* Current word */}
           <AnimatePresence mode="wait">
@@ -273,6 +270,12 @@ export default function SpeedTypingGame() {
               chaosType={chaos?.type}
             />
           </AnimatePresence>
+
+          {/* Upcoming words (dimmed) */}
+          <div className="mt-4">
+            <p className="text-white/20 text-xs mb-1">coming up</p>
+            <UpcomingWords words={upcomingWords} />
+          </div>
         </div>
 
         {/* Input field */}
