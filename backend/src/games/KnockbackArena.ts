@@ -34,10 +34,11 @@ export const PLATFORMS: Rect[] = [
 const PLAYER_R = 22;
 const PLAYER_ACCEL = 1800;       // px/s²
 const PLAYER_MAX_SPEED = 280;    // px/s
-const FRICTION = 6.0;            // exponential decay per second
-const PUNCH_RANGE = 65;
+const FRICTION = 6.0;            // exponential decay per second (normal movement)
+const KNOCKBACK_FRICTION = 1.2;  // much lower friction during knockback so it travels far
+const PUNCH_RANGE = 75;
 const PUNCH_ARC = Math.PI * 2 / 3;   // 120°
-const PUNCH_FORCE = 720;
+const PUNCH_FORCE = 1800;
 const PUNCH_COOLDOWN = 0.55;
 const DASH_SPEED = 740;
 const DASH_DURATION = 0.18;
@@ -240,20 +241,17 @@ export class KnockbackArena extends BaseGame {
           p.vx += nx * PLAYER_ACCEL * dt;
           p.vy += ny * PLAYER_ACCEL * dt;
         }
-        // Friction (exponential decay)
-        const damp = Math.exp(-FRICTION * dt);
+        // Use low friction when in knockback (speed well above walk max) so punches travel far
+        const sp = Math.hypot(p.vx, p.vy);
+        const frictionRate = sp > PLAYER_MAX_SPEED * 1.5 ? KNOCKBACK_FRICTION : FRICTION;
+        const damp = Math.exp(-frictionRate * dt);
         p.vx *= damp;
         p.vy *= damp;
-        // Soft cap to max speed (only for non-knockback motion)
-        const sp = Math.hypot(p.vx, p.vy);
-        if (sp > PLAYER_MAX_SPEED && mag > 0.05) {
+        // Soft cap to max speed only when player is driving themselves (not in knockback)
+        if (sp > PLAYER_MAX_SPEED && sp <= PLAYER_MAX_SPEED * 1.5 && mag > 0.05) {
           const k = PLAYER_MAX_SPEED / sp;
-          // Only damp toward max if player's velocity is roughly aligned with input
           const align = (p.vx * ix + p.vy * iy) / (sp * mag);
-          if (align > 0.5) {
-            p.vx *= k;
-            p.vy *= k;
-          }
+          if (align > 0.5) { p.vx *= k; p.vy *= k; }
         }
       } else {
         // During dash, mild decay so dash feels punchy and ends abruptly
