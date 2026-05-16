@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useGameStore, useGameState, useActiveChaos } from '@/store/gameStore';
 import SpeedTypingGame from './SpeedTypingGame';
 import FakeTriviaGame from './FakeTriviaGame';
-import { useSocket } from '@/hooks/useSocket';
+import { useSocketActions } from '@/hooks/useSocket';
 import { ChaosAnnouncement, ChaosFlash, DiscoFilter } from '@/components/ui/ChaosOverlay';
 import ToastContainer from '@/components/ui/ToastContainer';
 import { GameState, Player, PlayerResult } from '@/types';
@@ -241,7 +241,7 @@ export default function GameScreen() {
   const gameState = useGameState();
   const gameResults = useGameStore((s) => s.gameResults);
   const activeChaos = useActiveChaos();
-  const { leaveRoom } = useSocket();
+  const { leaveRoom } = useSocketActions();
 
   if (!gameState) return null;
 

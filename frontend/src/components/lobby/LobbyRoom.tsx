@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/store/gameStore';
-import { useSocket } from '@/hooks/useSocket';
+import { useSocketActions, getSocket } from '@/hooks/useSocket';
 import { Player, ChatMessage } from '@/types';
 import ToastContainer from '@/components/ui/ToastContainer';
 
@@ -31,12 +31,10 @@ function QRCode({ code }: { code: string }) {
 // ── Player Card ───────────────────────────────────────────────────────────────
 
 function PlayerCard({ player, isMe, isHost: viewerIsHost }: { player: Player; isMe: boolean; isHost: boolean }) {
-  const { socket } = useSocket();
-
   function kickPlayer() {
-    if (viewerIsHost && !isMe && socket) {
+    if (viewerIsHost && !isMe) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (socket as any).emit('lobby:kick', player.id);
+      (getSocket() as any).emit('lobby:kick', player.id);
     }
   }
 
@@ -102,7 +100,7 @@ function PlayerCard({ player, isMe, isHost: viewerIsHost }: { player: Player; is
 
 function ChatPanel() {
   const messages = useGameStore((s) => s.chatMessages);
-  const { sendChat } = useSocket();
+  const { sendChat } = useSocketActions();
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -190,7 +188,7 @@ export default function LobbyRoom() {
   const room = useGameStore((s) => s.room);
   const playerId = useGameStore((s) => s.playerId);
   const countdown = useGameStore((s) => s.gameCountdown);
-  const { setReady, startGame, leaveRoom } = useSocket();
+  const { setReady, startGame, leaveRoom } = useSocketActions();
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState<'players' | 'chat'>('players');
 

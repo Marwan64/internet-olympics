@@ -19,6 +19,10 @@ import {
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 let globalSocket: TypedSocket | null = null;
+// Track whether we've already bound the server→client listeners so multiple
+// components calling useSocket() don't register duplicates — or worse, have
+// their cleanup tear down another component's listeners.
+let listenersAttached = false;
 
 export function getSocket(): TypedSocket {
   if (!globalSocket) {
@@ -35,7 +39,9 @@ export function getSocket(): TypedSocket {
   return globalSocket;
 }
 
-// ── Main Hook ──────────────────────────────────────────────────────────────────
+// ── Attach server→client listeners exactly once ────────────────────────────────
+// Called by the top-level page component. Sub-components should call
+// useSocketActions() instead so they never touch listeners.
 
 export function useSocket() {
   const socketRef = useRef<TypedSocket | null>(null);
@@ -49,130 +55,113 @@ export function useSocket() {
       socket.connect();
     }
 
-    // ── Connection Events ──────────────────────────────────────────────────
+    // Only register server→client listeners once across the whole app lifetime.
+    if (listenersAttached) return;
+    listenersAttached = true;
+
+    // ── Connection ─────────────────────────────────────────────────────────
 
     socket.on('connect', () => {
-      store.setConnection({ connected: true, reconnecting: false });
-      store.addToast({ type: 'success', message: '🟢 Connected!', duration: 2000 });
+      useGameStore.getState().setConnection({ connected: true, reconnecting: false });
+      useGameStore.getState().addToast({ type: 'success', message: '🟢 Connected!', duration: 2000 });
     });
 
     socket.on('disconnect', (reason) => {
-      store.setConnection({ connected: false });
+      useGameStore.getState().setConnection({ connected: false });
       if (reason !== 'io client disconnect') {
-        store.addToast({ type: 'error', message: '🔴 Disconnected. Reconnecting...', duration: 3000 });
+        useGameStore.getState().addToast({ type: 'error', message: '🔴 Disconnected. Reconnecting...', duration: 3000 });
       }
     });
 
     socket.on('connect_error', () => {
-      store.setConnection({ connected: false, reconnecting: true });
+      useGameStore.getState().setConnection({ connected: false, reconnecting: true });
     });
 
     socket.io.on('reconnect_attempt', () => {
-      store.setConnection({ reconnecting: true });
+      useGameStore.getState().setConnection({ reconnecting: true });
     });
 
     socket.io.on('reconnect', () => {
-      store.setConnection({ connected: true, reconnecting: false });
-      store.addToast({ type: 'success', message: '✅ Reconnected!', duration: 2000 });
+      useGameStore.getState().setConnection({ connected: true, reconnecting: false });
+      useGameStore.getState().addToast({ type: 'success', message: '✅ Reconnected!', duration: 2000 });
     });
 
-    // ── Lobby Events ───────────────────────────────────────────────────────
+    // ── Lobby ──────────────────────────────────────────────────────────────
 
     socket.on('lobby:updated', (room: Room) => {
-      store.setRoom(room);
+      useGameStore.getState().setRoom(room);
     });
 
     socket.on('lobby:error', ({ message }: { message: string }) => {
-      store.addToast({ type: 'error', message });
+      useGameStore.getState().addToast({ type: 'error', message });
     });
 
     socket.on('lobby:chat', (msg: ChatMessage) => {
-      store.addChatMessage(msg);
+      useGameStore.getState().addChatMessage(msg);
     });
 
-    socket.on('lobby:playerReady', (_playerId: string, _ready: boolean) => {
-      // room update handles this
-    });
+    socket.on('lobby:playerReady', (_playerId: string, _ready: boolean) => {});
 
     socket.on('lobby:hostChanged', (_newHostId: string) => {
-      store.addToast({ type: 'info', message: '👑 Host has changed' });
+      useGameStore.getState().addToast({ type: 'info', message: '👑 Host has changed' });
     });
 
-    // ── Game Events ────────────────────────────────────────────────────────
+    // ── Game ───────────────────────────────────────────────────────────────
 
     socket.on('game:countdown', (seconds: number) => {
-      store.setGameCountdown(seconds);
+      useGameStore.getState().setGameCountdown(seconds);
       if (seconds === 3) {
-        store.addToast({ type: 'info', message: '🎮 Game starting!', duration: 4000 });
+        useGameStore.getState().addToast({ type: 'info', message: '🎮 Game starting!', duration: 4000 });
       }
     });
 
     socket.on('game:begin', (state: GameState) => {
-      store.clearGame();
-      store.setGameState(state);
-      store.setGameCountdown(null);
-      store.setScreen('game');
+      const s = useGameStore.getState();
+      s.clearGame();
+      s.setGameState(state);
+      s.setGameCountdown(null);
+      s.setScreen('game');
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     socket.on('game:state', (state: any) => {
-      store.setGameState(state as GameState);
+      useGameStore.getState().setGameState(state as GameState);
     });
 
     socket.on('game:end', (results: GameResults) => {
-      store.setGameResults(results);
+      useGameStore.getState().setGameResults(results);
     });
 
-    // Personal per-player data (speed typing words etc.)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (socket as any).on('game:personal', (data: PersonalGameData) => {
-      store.setPersonalData(data);
+      useGameStore.getState().setPersonalData(data);
     });
 
-    // ── Session Events ─────────────────────────────────────────────────────
+    // ── Session ────────────────────────────────────────────────────────────
 
     socket.on('session:podium', (data: PodiumData) => {
-      store.setPodiumData(data);
+      useGameStore.getState().setPodiumData(data);
     });
 
-    // ── Chaos Events ───────────────────────────────────────────────────────
+    // ── Chaos ──────────────────────────────────────────────────────────────
 
     socket.on('chaos:event', (event: ChaosEvent) => {
-      store.triggerChaos(event);
+      useGameStore.getState().triggerChaos(event);
     });
 
     socket.on('chaos:announcement', (text: string) => {
-      store.setChaosAnnouncement(text);
-      store.addToast({ type: 'chaos', message: text, duration: 3000 });
+      useGameStore.getState().setChaosAnnouncement(text);
+      useGameStore.getState().addToast({ type: 'chaos', message: text, duration: 3000 });
     });
 
     // ── System ─────────────────────────────────────────────────────────────
 
     socket.on('system:ping', (ts: number) => {
       socket.emit('system:pong', ts);
-      store.setConnection({ latency: Date.now() - ts });
+      useGameStore.getState().setConnection({ latency: Date.now() - ts });
     });
 
-    return () => {
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.off('connect_error');
-      socket.off('lobby:updated');
-      socket.off('lobby:error');
-      socket.off('lobby:chat');
-      socket.off('lobby:playerReady');
-      socket.off('lobby:hostChanged');
-      socket.off('game:countdown');
-      socket.off('game:begin');
-      socket.off('game:state');
-      socket.off('game:end');
-      socket.off('session:podium');
-      socket.off('chaos:event');
-      socket.off('chaos:announcement');
-      socket.off('system:ping');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (socket as any).off('game:personal');
-    };
+    // No cleanup — listeners are intentionally permanent for the app lifetime.
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Emitters ───────────────────────────────────────────────────────────────
@@ -226,24 +215,24 @@ export function useSocket() {
   );
 
   const leaveRoom = useCallback(() => {
-    socketRef.current?.emit('lobby:leave');
+    getSocket().emit('lobby:leave');
     store.clearRoom();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setReady = useCallback((ready: boolean) => {
-    socketRef.current?.emit('lobby:ready', ready);
+    getSocket().emit('lobby:ready', ready);
   }, []);
 
   const startGame = useCallback(() => {
-    socketRef.current?.emit('lobby:start');
+    getSocket().emit('lobby:start');
   }, []);
 
   const sendChat = useCallback((message: string) => {
-    socketRef.current?.emit('lobby:chat', message);
+    getSocket().emit('lobby:chat', message);
   }, []);
 
   const sendInput = useCallback((type: string, payload: Record<string, unknown>) => {
-    socketRef.current?.emit('game:input', { type, payload });
+    getSocket().emit('game:input', { type, payload });
   }, []);
 
   return {
@@ -256,4 +245,33 @@ export function useSocket() {
     sendChat,
     sendInput,
   };
+}
+
+// ── Lightweight hook for sub-components that only need to emit ─────────────────
+// Use this in game components (SpeedTypingGame, FakeTriviaGame, etc.) instead
+// of useSocket() to avoid touching listeners.
+
+export function useSocketActions() {
+  const leaveRoom = useCallback(() => {
+    getSocket().emit('lobby:leave');
+    useGameStore.getState().clearRoom();
+  }, []);
+
+  const setReady = useCallback((ready: boolean) => {
+    getSocket().emit('lobby:ready', ready);
+  }, []);
+
+  const startGame = useCallback(() => {
+    getSocket().emit('lobby:start');
+  }, []);
+
+  const sendChat = useCallback((message: string) => {
+    getSocket().emit('lobby:chat', message);
+  }, []);
+
+  const sendInput = useCallback((type: string, payload: Record<string, unknown>) => {
+    getSocket().emit('game:input', { type, payload });
+  }, []);
+
+  return { leaveRoom, setReady, startGame, sendChat, sendInput };
 }

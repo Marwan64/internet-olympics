@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameState, useGameStore } from '@/store/gameStore';
-import { useSocket } from '@/hooks/useSocket';
+import { useSocketActions } from '@/hooks/useSocket';
 import { FakeTriviaData, TriviaAnswer } from '@/types';
 
 // ── Category badge ────────────────────────────────────────────────────────────
@@ -226,7 +226,7 @@ export default function FakeTriviaGame() {
   const gameState = useGameState();
   const room = useGameStore((s) => s.room);
   const playerId = useGameStore((s) => s.playerId);
-  const { sendInput } = useSocket();
+  const { sendInput } = useSocketActions();
 
   const [myAnswer, setMyAnswer] = useState<'real' | 'fake' | null>(null);
   const [startTime] = useState(Date.now());

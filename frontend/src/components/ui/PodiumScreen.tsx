@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/store/gameStore';
-import { useSocket } from '@/hooks/useSocket';
+import { useSocketActions } from '@/hooks/useSocket';
 import { PlayerResult } from '@/types';
 import ToastContainer from './ToastContainer';
 
@@ -14,7 +14,7 @@ const RANK_HEIGHTS = ['h-48', 'h-36', 'h-28'];
 export default function PodiumScreen() {
   const podiumData = useGameStore((s) => s.podiumData);
   const playerId = useGameStore((s) => s.playerId);
-  const { leaveRoom } = useSocket();
+  const { leaveRoom } = useSocketActions();
 
   useEffect(() => {
     // Trigger confetti-like particle burst on mount

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore, usePersonalData, useActiveChaos } from '@/store/gameStore';
-import { useSocket } from '@/hooks/useSocket';
+import { useSocketActions } from '@/hooks/useSocket';
 
 // ── Score Popup ───────────────────────────────────────────────────────────────
 
@@ -119,7 +119,7 @@ function StatsBar({ wordsCompleted, wpm, accuracy }: { wordsCompleted: number; w
 export default function SpeedTypingGame() {
   const personal = usePersonalData();
   const chaos = useActiveChaos();
-  const { sendInput } = useSocket();
+  const { sendInput } = useSocketActions();
 
   const [inputValue, setInputValue] = useState('');
   const [inputState, setInputState] = useState<'idle' | 'correct' | 'incorrect'>('idle');
