@@ -357,7 +357,7 @@ export default function MarioGame() {
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const socket = getSocket() as any;
-    const myId = useGameStore.getState().playerId;
+    const myId = getSocket().id;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const onState = (data: any) => {
@@ -846,7 +846,7 @@ export default function MarioGame() {
     // Local player
     if (!p.dead) {
       const myRoom = useGameStore.getState().room;
-      const myId = useGameStore.getState().playerId;
+      const myId = getSocket().id;
       const myPlayer = myRoom?.players.find(pl => pl.id === myId);
       const color = myPlayer?.color ?? '#dc2626';
       const lx = p.x - cam;

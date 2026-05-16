@@ -387,7 +387,7 @@ export default function ShoppingCart() {
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const socket = getSocket() as any;
-    const myId = useGameStore.getState().playerId;
+    const myId = getSocket().id;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const onState = (data: { t: number; carts: any[] }) => {
@@ -483,7 +483,7 @@ export default function ShoppingCart() {
     if (!state) return;
     const { renderer, scene, camera, cartMeshes, pickupMeshes } = state;
     const room = useGameStore.getState().room;
-    const myId = useGameStore.getState().playerId;
+    const myId = getSocket().id;
     const now = performance.now();
 
     // Animate pickups (bob + rotate)

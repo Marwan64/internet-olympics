@@ -76,7 +76,7 @@ export default function KnockbackArena() {
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const socket = getSocket() as any;
-    const myId = useGameStore.getState().playerId;
+    const myId = getSocket().id;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const onState = (data: { t: number; players: any[] }) => {
@@ -303,7 +303,7 @@ export default function KnockbackArena() {
     }
 
     const room = useGameStore.getState().room;
-    const myId = useGameStore.getState().playerId;
+    const myId = getSocket().id;
 
     // ── Draw all players (interpolated for remotes, predicted for local) ──
     const allIds = new Set<string>();
