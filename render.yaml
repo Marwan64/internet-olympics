@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: internet-olympics-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm run build
+    startCommand: node dist/server.js
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        value: internetolympics_secret_key_2024_change_me
+      - key: FRONTEND_URL
+        sync: false
