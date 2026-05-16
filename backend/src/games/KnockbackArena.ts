@@ -85,6 +85,7 @@ export class KnockbackArena extends BaseGame {
   private broadcastInterval: NodeJS.Timeout | null = null;
   private lastPhysicsTick = Date.now();
   private pendingEvents: Array<{ type: string; data: Record<string, unknown> }> = [];
+  private endingEarly = false;
 
   protected async onStart(): Promise<void> {
     // Distribute spawn points around the main platform
@@ -312,25 +313,25 @@ export class KnockbackArena extends BaseGame {
       }
     }
 
-    // 6. Check round-end conditions
-    const aliveNotEliminated = [...this.players.values()].filter(p => !p.eliminated);
-    if (aliveNotEliminated.length <= 1 && this.players.size > 1) {
-      // Last player standing — end round early
-      const winner = aliveNotEliminated[0];
-      if (winner) {
-        this.addScore(winner.socketId, 5); // last-survivor bonus
+    // 6. Check round-end conditions (only fire once)
+    if (!this.endingEarly) {
+      const aliveNotEliminated = [...this.players.values()].filter(p => !p.eliminated);
+      if (aliveNotEliminated.length <= 1 && this.players.size > 1) {
+        this.endingEarly = true;
+        const winner = aliveNotEliminated[0];
+        if (winner) this.addScore(winner.socketId, 5);
+        setTimeout(() => {
+          if (this.isRunning) {
+            this.clearTimers();
+            this.isRunning = false;
+            this.phase = 'results';
+            this.broadcastState();
+            const results = this.buildResults();
+            this.io.to(this.config.roomId).emit('game:end', results);
+            this.emit('ended', results);
+          }
+        }, 1500);
       }
-      setTimeout(() => {
-        if (this.isRunning) {
-          this.clearTimers();
-          this.isRunning = false;
-          this.phase = 'results';
-          this.broadcastState();
-          const results = this.buildResults();
-          this.io.to(this.config.roomId).emit('game:end', results);
-          this.emit('ended', results);
-        }
-      }, 1500);
     }
   }
 

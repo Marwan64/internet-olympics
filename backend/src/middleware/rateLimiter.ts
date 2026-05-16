@@ -9,8 +9,8 @@ interface RateEntry {
 }
 
 const WINDOW_MS = 10_000;       // 10-second sliding window
-const MAX_EVENTS = 30;          // max events per window
-const BLOCK_DURATION_MS = 30_000; // 30-second block on violation
+const MAX_EVENTS = 60;          // max non-game events per window (lobby/chat actions)
+const BLOCK_DURATION_MS = 10_000; // 10-second block on violation (was 30, too punishing)
 
 const clientRates = new Map<string, RateEntry>();
 

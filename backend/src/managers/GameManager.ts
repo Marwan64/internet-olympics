@@ -110,7 +110,10 @@ export class GameManager {
 
     this.io.to(roomId).emit('game:end', enrichedResults);
 
-    const hasMore = state.currentGameIndex < room.gamePlaylist.length - 1;
+    // currentGameIndex was incremented at the end of loadNextGame, so it now
+    // equals the count of games already started. We have more games iff that
+    // count is less than the playlist length.
+    const hasMore = state.currentGameIndex < room.gamePlaylist.length;
 
     if (hasMore) {
       // Brief pause then load next game

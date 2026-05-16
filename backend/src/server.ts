@@ -211,10 +211,10 @@ io.on('connection', (socket) => {
   // ── Game: Input ──────────────────────────────────────────────────────────
 
   socket.on('game:input', (input) => {
-    withRateLimit(socket, 'game:input', () => {
-      if (!input || typeof input.type !== 'string') return;
-      gameManager.handleInput(socket.id, input);
-    });
+    // No rate limit — physics games send input at 20Hz by design.
+    // Server-side game logic validates each input (cooldowns, distances, etc).
+    if (!input || typeof input.type !== 'string') return;
+    gameManager.handleInput(socket.id, input);
   });
 
   // ── Ping/Pong for latency ────────────────────────────────────────────────
