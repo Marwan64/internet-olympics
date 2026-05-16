@@ -7,6 +7,7 @@ import { KnockbackArena } from '../games/KnockbackArena';
 import { ShoppingCart } from '../games/ShoppingCart';
 import { RageObby } from '../games/RageObby';
 import { FloorIsLava } from '../games/FloorIsLava';
+import { PhysicsSoccer } from '../games/PhysicsSoccer';
 import { logger } from '../utils/logger';
 
 // ── Game Registry ──────────────────────────────────────────────────────────────
@@ -19,6 +20,7 @@ const GAME_REGISTRY: Record<GameType, GameConstructor> = {
   'shopping-cart-racing': ShoppingCart,
   'rage-obby': RageObby,
   'floor-is-lava': FloorIsLava,
+  'physics-soccer': PhysicsSoccer,
 };
 
 // ── Manager ────────────────────────────────────────────────────────────────────
@@ -156,7 +158,7 @@ export class GameManager {
     this.roomManager.resetRoundScores(roomId);
 
     const GameClass = GAME_REGISTRY[gameType];
-    const GAME_DURATIONS: Partial<Record<GameType, number>> = { 'rage-obby': 90, 'floor-is-lava': 90 };
+    const GAME_DURATIONS: Partial<Record<GameType, number>> = { 'rage-obby': 90, 'floor-is-lava': 90, 'physics-soccer': 90 };
     const config: GameConfig = {
       roomId,
       playerIds: room.players.filter((p) => p.isConnected).map((p) => p.socketId),

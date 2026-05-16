@@ -54,7 +54,8 @@ export type GameType =
   | 'knockback-arena'
   | 'shopping-cart-racing'
   | 'rage-obby'
-  | 'floor-is-lava';
+  | 'floor-is-lava'
+  | 'physics-soccer';
 
 export type RoomStatus =
   | 'lobby' | 'countdown' | 'intro' | 'playing' | 'results' | 'podium' | 'ended';

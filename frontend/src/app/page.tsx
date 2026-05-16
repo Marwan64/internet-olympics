@@ -51,6 +51,7 @@ const GAMES_SHOWCASE = [
   { emoji: '🛒', name: 'Shopping Cart Racing', desc: 'Bumpy downhill race. Grab turbos, dodge trees, reach the flag first.', color: '#F59E0B', dur: '60s' },
   { emoji: '😤', name: 'Rage Obby', desc: 'Jump across platforms, dodge spikes, ride moving ledges. Die → respawn at checkpoint.', color: '#10B981', dur: '90s' },
   { emoji: '🌋', name: 'Floor is Lava', desc: 'Rising lava swallows the tower. Climb higher, survive longer. Last one alive wins.', color: '#F97316', dur: '90s' },
+  { emoji: '⚽', name: 'Physics Soccer', desc: 'Slam the ball into the goal. Chaos modifiers. Boost dashes. Ridiculous collisions. Pure mayhem.', color: '#06B6D4', dur: '90s' },
 ];
 
 const CHAOS_ANNOUNCEMENTS = [
@@ -285,7 +286,7 @@ function HomeContent() {
           viewport={{ once: true }}
           className="font-display font-bold text-3xl sm:text-4xl text-center text-white mb-3"
         >
-          5 Games. All Chaos.
+          6 Games. All Chaos.
         </motion.h2>
         <p className="text-center text-white/50 mb-10">Rounds last 60-90 seconds. No boring downtime.</p>
 

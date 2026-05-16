@@ -57,6 +57,7 @@ export type GameType =
   | 'shopping-cart-racing'
   | 'rage-obby'
   | 'floor-is-lava'
+  | 'physics-soccer'
   | 'speed-typing'
   | 'fake-trivia'
   | 'drawing'
