@@ -52,7 +52,8 @@ export interface ChatMessage {
 export type GameType =
   | 'mario-race'
   | 'knockback-arena'
-  | 'shopping-cart-racing';
+  | 'shopping-cart-racing'
+  | 'rage-obby';
 
 export type RoomStatus =
   | 'lobby' | 'countdown' | 'intro' | 'playing' | 'results' | 'podium' | 'ended';

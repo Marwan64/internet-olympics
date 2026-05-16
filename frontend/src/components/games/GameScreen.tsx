@@ -5,6 +5,7 @@ import { useGameStore, useGameState, useActiveChaos } from '@/store/gameStore';
 import MarioGame from './MarioGame';
 import KnockbackArena from './KnockbackArena';
 import ShoppingCart from './ShoppingCart';
+import RageObby from './RageObby';
 import { useSocketActions } from '@/hooks/useSocket';
 import { ChaosAnnouncement, ChaosFlash, DiscoFilter } from '@/components/ui/ChaosOverlay';
 import ToastContainer from '@/components/ui/ToastContainer';
@@ -179,7 +180,8 @@ function GameIntroScreen({ gameState }: { gameState: GameState }) {
   const gameNames: Record<string, { name: string; emoji: string; desc: string }> = {
     'mario-race': { name: 'Mario Race!', emoji: '🍄', desc: 'Race to the 🏁 pipe! Stomp Goombas, hit ? blocks, use power-ups. First one in wins!' },
     'knockback-arena': { name: 'Knockback Arena', emoji: '👊', desc: 'Punch and dash everyone off the platforms. Last one standing wins.' },
-    'shopping-cart-racing': { name: 'Shopping Cart Racing', emoji: '🛒', desc: 'Bumpy side-scrolling race. Grab turbos, avoid bananas, reach the flag first!' },
+    'shopping-cart-racing': { name: 'Shopping Cart Racing', emoji: '🛒', desc: 'Bumpy downhill race. Grab turbos, dodge trees, reach the flag first!' },
+    'rage-obby': { name: 'Rage Obby', emoji: '😤', desc: 'Jump across platforms, dodge spikes, ride moving ledges. Die → go back to your last checkpoint!' },
   };
 
   const info = gameNames[gameState.type] ?? { name: gameState.type, emoji: '🎮', desc: 'Get ready!' };
@@ -305,7 +307,8 @@ export default function GameScreen() {
                   {gameState.type === 'mario-race' && <MarioGame />}
                   {gameState.type === 'knockback-arena' && <KnockbackArena />}
                   {gameState.type === 'shopping-cart-racing' && <ShoppingCart />}
-                  {!['mario-race', 'knockback-arena', 'shopping-cart-racing'].includes(gameState.type) && (
+                  {gameState.type === 'rage-obby' && <RageObby />}
+                  {!['mario-race', 'knockback-arena', 'shopping-cart-racing', 'rage-obby'].includes(gameState.type) && (
                     <div className="flex items-center justify-center h-64 text-white/50 text-xl">
                       Coming soon: {gameState.type} 🚧
                     </div>

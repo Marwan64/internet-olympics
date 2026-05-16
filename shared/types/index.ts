@@ -52,6 +52,10 @@ export interface ChatMessage {
 // ─── Game Types ───────────────────────────────────────────────────────────────
 
 export type GameType =
+  | 'mario-race'
+  | 'knockback-arena'
+  | 'shopping-cart-racing'
+  | 'rage-obby'
   | 'speed-typing'
   | 'fake-trivia'
   | 'drawing'
