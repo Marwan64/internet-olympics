@@ -1,125 +1,171 @@
 /**
- * Shopping Cart Racing — side-scrolling chaotic race.
+ * Shopping Cart Racing — 3D downhill racer.
  *
- * Carts roll along a bumpy heightmap track. Touch turbo items for a 3s boost,
- * touch banana items to spin out for 1.2s. First to the finish line wins, with
- * distance-based fallback if the timer runs out.
+ * Coordinate system:
+ *   x  = forward distance down the mountain  (0 → FINISH_X)
+ *   y  = vertical (height above slope)       (0 = on terrain)
+ *   z  = lateral position                    (-LANE_HALF → +LANE_HALF)
  *
- * Same architecture as Knockback Arena: 30Hz physics, 15Hz broadcast, action
- * events flushed alongside state.
+ * Forward motion is gravity-driven (downhill). Players steer left/right with
+ * A/D, accelerate with W (extra gas), brake with S, and can jump (Space) when
+ * grounded — useful for clearing obstacles. Ramps give a free jump.
+ *
+ * Server runs physics at 30Hz, broadcasts at 15Hz, sends action events
+ * (turbo, hit, finish) immediately.
  */
 import { GameResults, PlayerResult } from '../types';
 import { BaseGame } from './BaseGame';
 
-export const TRACK_WIDTH = 6000;
-const GROUND_BASE = 480;
-export const FINISH_X = 5800;
-const CART_W = 56;
-const CART_H = 40;
-const GRAVITY = 1600;
-const ACCEL = 620;
-const REVERSE_ACCEL = 340;
-const MAX_SPEED = 380;
-const BOOST_MULT = 1.7;
-const FRICTION = 0.55;
-const JUMP_IMPULSE = -520;
+export const TRACK_LENGTH = 7000;
+export const FINISH_X = 6800;
+export const LANE_HALF = 220;     // track is 440 wide
+const CART_R = 22;                // collision radius
 const PHYSICS_HZ = 30;
 const BROADCAST_HZ = 15;
 
-// Shared by client + server. Same exact formula on both sides.
-export function groundAt(x: number): number {
-  if (x < 0) return GROUND_BASE;
-  if (x > TRACK_WIDTH) return GROUND_BASE;
-  let y = GROUND_BASE;
-  // Rolling hills
-  y += Math.sin(x / 90) * 14;
-  y += Math.cos(x / 240) * 28;
-  // Up ramp
-  if (x > 1400 && x < 1700) y -= (x - 1400) * 0.35;
-  if (x >= 1700 && x < 1900) y -= 105 - (x - 1700) * 0.55;
-  // Dip
-  if (x > 2400 && x < 2800) y += Math.sin(((x - 2400) / 400) * Math.PI) * 70;
-  // Bumpy patch
-  if (x > 3300 && x < 3700) y += Math.sin(x / 30) * 18;
-  // Steep climb
-  if (x > 4200 && x < 4500) y -= (x - 4200) * 0.3;
-  if (x >= 4500 && x < 4700) y -= 90 - (x - 4500) * 0.45;
-  // Final flat-ish
-  return y;
+// Forward physics
+const GRAVITY_FORWARD = 90;       // constant downhill acceleration
+const GAS_ACCEL = 180;            // extra accel from W
+const BRAKE_DECEL = 280;          // S braking
+const FORWARD_MAX = 540;          // top speed
+const FORWARD_DRAG = 0.18;        // air drag
+
+// Lateral steering
+const STEER_ACCEL = 600;
+const LATERAL_FRICTION = 4.5;
+const LATERAL_MAX = 280;
+
+// Vertical
+const GRAVITY_DOWN = 1900;
+const JUMP_IMPULSE = -650;
+const RAMP_LAUNCH = -780;         // when crossing a ramp at speed
+
+// Items
+const BOOST_DURATION = 3000;
+const BOOST_MULT = 1.7;
+const SPIN_DURATION = 1200;
+
+// Course features
+export const RAMPS = [
+  { x: 1400, halfWidth: 80 },
+  { x: 2800, halfWidth: 80 },
+  { x: 4200, halfWidth: 80 },
+  { x: 5600, halfWidth: 80 },
+];
+
+export const OBSTACLES: Array<{ id: string; x: number; z: number; type: 'tree' | 'rock' }> = [
+  { id: 'o0', x: 600, z: -120, type: 'tree' },
+  { id: 'o1', x: 850, z: 80,   type: 'rock' },
+  { id: 'o2', x: 1100, z: -40, type: 'tree' },
+  { id: 'o3', x: 1800, z: 100, type: 'tree' },
+  { id: 'o4', x: 2100, z: -160, type: 'rock' },
+  { id: 'o5', x: 2400, z: 50,  type: 'tree' },
+  { id: 'o6', x: 3100, z: -100, type: 'rock' },
+  { id: 'o7', x: 3400, z: 130, type: 'tree' },
+  { id: 'o8', x: 3700, z: 0,   type: 'tree' },
+  { id: 'o9', x: 4500, z: -150, type: 'rock' },
+  { id: 'o10', x: 4800, z: 90, type: 'tree' },
+  { id: 'o11', x: 5100, z: -60, type: 'tree' },
+  { id: 'o12', x: 5300, z: 160, type: 'rock' },
+  { id: 'o13', x: 5900, z: -80, type: 'tree' },
+  { id: 'o14', x: 6200, z: 50,  type: 'rock' },
+];
+
+export const PICKUPS: Array<{ id: string; x: number; z: number; type: 'turbo' }> = [
+  { id: 'p0', x: 500, z: 0, type: 'turbo' },
+  { id: 'p1', x: 1200, z: -100, type: 'turbo' },
+  { id: 'p2', x: 2000, z: 100, type: 'turbo' },
+  { id: 'p3', x: 2700, z: 0, type: 'turbo' },
+  { id: 'p4', x: 3500, z: -80, type: 'turbo' },
+  { id: 'p5', x: 4300, z: 120, type: 'turbo' },
+  { id: 'p6', x: 5000, z: -60, type: 'turbo' },
+  { id: 'p7', x: 5700, z: 80, type: 'turbo' },
+  { id: 'p8', x: 6400, z: 0, type: 'turbo' },
+];
+
+// Terrain height: gentle downhill + bumps. Smaller bumps = more controllable.
+// Note: the cart's "y" coordinate is relative ground level (0 = on terrain).
+// Visual elevation comes from this function purely for the renderer.
+export function terrainHeight(x: number): number {
+  if (x < 0) return 0;
+  if (x > TRACK_LENGTH) return -TRACK_LENGTH * 0.15;
+  // Overall downhill drop (each x unit = -0.12 height)
+  let h = -x * 0.12;
+  // Rolling bumps
+  h += Math.sin(x / 110) * 14;
+  h += Math.cos(x / 270) * 22;
+  // Pronounced ramps
+  for (const r of RAMPS) {
+    if (Math.abs(x - r.x) < r.halfWidth) {
+      const t = 1 - Math.abs(x - r.x) / r.halfWidth;
+      h += Math.sin(t * Math.PI) * 55;
+    }
+  }
+  return h;
 }
 
-export const ITEMS: Array<{ id: string; x: number; type: 'turbo' | 'banana' }> = [
-  { id: 'i0', x: 500, type: 'turbo' },
-  { id: 'i1', x: 1100, type: 'turbo' },
-  { id: 'i2', x: 1800, type: 'banana' },
-  { id: 'i3', x: 2200, type: 'turbo' },
-  { id: 'i4', x: 2600, type: 'banana' },
-  { id: 'i5', x: 3000, type: 'turbo' },
-  { id: 'i6', x: 3400, type: 'banana' },
-  { id: 'i7', x: 3800, type: 'turbo' },
-  { id: 'i8', x: 4400, type: 'banana' },
-  { id: 'i9', x: 5000, type: 'turbo' },
-  { id: 'i10', x: 5500, type: 'turbo' },
-];
+// ── State ─────────────────────────────────────────────────────────────────────
 
 interface CartState {
   socketId: string;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  angle: number;
+  x: number; y: number; z: number;
+  vx: number; vy: number; vz: number;
   onGround: boolean;
   boostUntil: number;
   spinOutUntil: number;
   finished: boolean;
   finishRank: number;
-  bestSpeed: number;
-  input: { left: boolean; right: boolean; brake: boolean; jumpRequested: boolean };
+  input: {
+    accel: boolean;
+    brake: boolean;
+    left: boolean;
+    right: boolean;
+    jump: boolean;
+  };
+  jumpRequestedAt: number;
+  lastRampX: number;
+  pickupsTaken: Set<string>;
 }
 
-interface ItemPickup {
-  id: string;
-  x: number;
-  type: 'turbo' | 'banana';
-  active: boolean;
-  respawnAt: number;
-}
+interface PickupState { id: string; x: number; z: number; type: 'turbo'; active: boolean; respawnAt: number }
+
+// ── Game ──────────────────────────────────────────────────────────────────────
 
 export class ShoppingCart extends BaseGame {
   readonly gameType = 'shopping-cart-racing' as const;
-  readonly displayName = 'Shopping Cart Racing 🛒';
+  readonly displayName = 'Shopping Cart Downhill 🛒';
 
   private carts = new Map<string, CartState>();
-  private items: ItemPickup[] = [];
+  private pickups: PickupState[] = [];
   private finishCount = 0;
   private physicsInterval: NodeJS.Timeout | null = null;
   private broadcastInterval: NodeJS.Timeout | null = null;
   private lastTick = Date.now();
   private pendingEvents: Array<{ type: string; data: Record<string, unknown> }> = [];
+  private endingEarly = false;
 
   protected async onStart(): Promise<void> {
     const ids = [...this.config.playerIds];
     ids.forEach((id, idx) => {
-      const lane = idx % 4;
-      const row = Math.floor(idx / 4);
-      const startX = 60 + lane * 70 + row * 8;
+      // Spread starting carts across the lane
+      const lateral = ((idx % 5) - 2) * 60;
       this.carts.set(id, {
         socketId: id,
-        x: startX,
-        y: groundAt(startX + CART_W / 2) - CART_H,
-        vx: 0, vy: 0,
-        angle: 0,
+        x: 30 + Math.floor(idx / 5) * 10,
+        y: 0, z: lateral,
+        vx: 0, vy: 0, vz: 0,
         onGround: true,
         boostUntil: 0,
         spinOutUntil: 0,
         finished: false,
         finishRank: 0,
-        bestSpeed: 0,
-        input: { left: false, right: false, brake: false, jumpRequested: false },
+        input: { accel: false, brake: false, left: false, right: false, jump: false },
+        jumpRequestedAt: 0,
+        lastRampX: -1000,
+        pickupsTaken: new Set(),
       });
     });
-    this.items = ITEMS.map(it => ({ ...it, active: true, respawnAt: 0 }));
+    this.pickups = PICKUPS.map(p => ({ ...p, active: true, respawnAt: 0 }));
   }
 
   protected async onPlayStart(): Promise<void> {
@@ -142,12 +188,13 @@ export class ShoppingCart extends BaseGame {
 
     switch (input.type) {
       case 'cart_input':
+        c.input.accel = !!input.payload.accel;
+        c.input.brake = !!input.payload.brake;
         c.input.left = !!input.payload.left;
         c.input.right = !!input.payload.right;
-        c.input.brake = !!input.payload.brake;
         break;
       case 'cart_jump':
-        c.input.jumpRequested = true;
+        c.jumpRequestedAt = Date.now();
         break;
     }
   }
@@ -160,129 +207,151 @@ export class ShoppingCart extends BaseGame {
 
     for (const c of this.carts.values()) {
       if (c.finished) continue;
-
-      const spunOut = now < c.spinOutUntil;
+      const spinning = now < c.spinOutUntil;
       const boosted = now < c.boostUntil;
+      const mult = boosted ? BOOST_MULT : 1;
 
-      if (!spunOut) {
-        const mult = boosted ? BOOST_MULT : 1;
-        if (c.input.right) c.vx += ACCEL * mult * dt;
-        if (c.input.left)  c.vx -= REVERSE_ACCEL * dt;
-        if (c.input.brake) c.vx *= Math.exp(-3 * dt);
-        // Jump
-        if (c.input.jumpRequested && c.onGround) {
-          c.vy = JUMP_IMPULSE;
-          c.onGround = false;
-        }
-        c.input.jumpRequested = false;
-      } else {
-        // Spin out — tumble
-        c.vx *= Math.exp(-1.6 * dt);
-        c.angle += dt * 9;
+      // ── Forward ──
+      // Always-on downhill gravity
+      c.vx += GRAVITY_FORWARD * mult * dt;
+      if (!spinning) {
+        if (c.input.accel) c.vx += GAS_ACCEL * mult * dt;
+        if (c.input.brake) c.vx -= BRAKE_DECEL * dt;
+      }
+      // Drag scales with speed²
+      c.vx -= c.vx * FORWARD_DRAG * dt;
+      if (c.vx < 30) c.vx = 30; // never fully stop; this is a downhill race
+      const fmax = FORWARD_MAX * mult;
+      if (c.vx > fmax) c.vx = fmax;
+
+      // ── Lateral steering ──
+      if (!spinning) {
+        if (c.input.left) c.vz -= STEER_ACCEL * dt;
+        if (c.input.right) c.vz += STEER_ACCEL * dt;
+      }
+      c.vz -= c.vz * LATERAL_FRICTION * dt;
+      if (c.vz > LATERAL_MAX) c.vz = LATERAL_MAX;
+      if (c.vz < -LATERAL_MAX) c.vz = -LATERAL_MAX;
+
+      // ── Vertical ──
+      if (!c.onGround) {
+        c.vy += GRAVITY_DOWN * dt;
       }
 
-      // Friction on ground
-      if (c.onGround && !c.input.right && !c.input.left) c.vx *= Math.exp(-FRICTION * dt);
+      // Jump (if requested within last 100ms and grounded)
+      if (c.onGround && now - c.jumpRequestedAt < 100) {
+        c.vy = JUMP_IMPULSE;
+        c.onGround = false;
+        c.jumpRequestedAt = 0;
+      }
 
-      // Speed cap
-      const cap = boosted ? MAX_SPEED * BOOST_MULT : MAX_SPEED;
-      if (c.vx > cap) c.vx = cap;
-      if (c.vx < -cap * 0.4) c.vx = -cap * 0.4;
-
-      // Gravity if airborne
-      if (!c.onGround) c.vy += GRAVITY * dt;
-
-      // Integrate
+      // ── Integrate ──
       c.x += c.vx * dt;
       c.y += c.vy * dt;
-      c.x = Math.max(0, Math.min(TRACK_WIDTH - CART_W, c.x));
+      c.z += c.vz * dt;
 
-      // Ground collision
-      const cartFootX = c.x + CART_W / 2;
-      const groundY = groundAt(cartFootX) - CART_H;
-      if (c.y >= groundY) {
-        const landed = !c.onGround && c.vy > 200;
-        c.y = groundY;
+      // Lateral wall bounce
+      if (c.z > LANE_HALF) { c.z = LANE_HALF; c.vz = -c.vz * 0.4; }
+      if (c.z < -LANE_HALF) { c.z = -LANE_HALF; c.vz = -c.vz * 0.4; }
+
+      // Ground collision: y=0 is "on terrain"
+      if (c.y >= 0) {
+        if (!c.onGround && c.vy > 200) c.vx *= 0.85; // hard landing
+        c.y = 0;
         c.vy = 0;
         c.onGround = true;
-        if (landed) c.vx *= 0.75; // hard landing penalty
       } else {
         c.onGround = false;
       }
 
-      // Angle: in the air, lean; on ground, follow terrain slope
-      if (c.onGround && !spunOut) {
-        const dx = 28;
-        const ahead = groundAt(cartFootX + dx);
-        const behind = groundAt(cartFootX - dx);
-        c.angle = Math.atan2(ahead - behind, dx * 2);
-      } else if (!spunOut) {
-        c.angle += (c.vx > 0 ? 1 : -1) * dt * 0.4;
-        c.angle = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, c.angle));
+      // Ramp launch: when crossing a ramp at speed, get auto-air
+      for (const r of RAMPS) {
+        if (c.lastRampX !== r.x && Math.abs(c.x - r.x) < r.halfWidth * 0.3 && c.onGround && c.vx > 200) {
+          c.vy = RAMP_LAUNCH;
+          c.onGround = false;
+          c.lastRampX = r.x;
+          this.pendingEvents.push({ type: 'cart:ramp', data: { id: c.socketId } });
+        }
       }
 
-      if (Math.abs(c.vx) > c.bestSpeed) c.bestSpeed = Math.abs(c.vx);
+      // ── Obstacles ──
+      if (!spinning) {
+        for (const o of OBSTACLES) {
+          const dx = c.x - o.x;
+          const dz = c.z - o.z;
+          // Trees taller, rocks shorter; only collide if cart isn't above the obstacle
+          const obsHeight = o.type === 'tree' ? 90 : 30;
+          if (c.y < -obsHeight) continue; // jumped over it
+          if (dx * dx + dz * dz < (CART_R + 18) ** 2) {
+            c.spinOutUntil = now + SPIN_DURATION;
+            c.vx *= 0.45;
+            c.vz = -c.vz * 0.3;
+            this.pendingEvents.push({ type: 'cart:hit', data: { id: c.socketId, obstacleId: o.id } });
+            break;
+          }
+        }
+      }
 
-      // Finish
-      if (!c.finished && c.x + CART_W / 2 >= FINISH_X) {
+      // ── Pickups ──
+      for (const p of this.pickups) {
+        if (!p.active) {
+          if (now >= p.respawnAt) p.active = true;
+          else continue;
+        }
+        if (!p.active) continue;
+        const dx = c.x - p.x;
+        const dz = c.z - p.z;
+        if (dx * dx + dz * dz < (CART_R + 20) ** 2) {
+          p.active = false;
+          p.respawnAt = now + 6000;
+          c.boostUntil = now + BOOST_DURATION;
+          this.pendingEvents.push({ type: 'cart:turbo', data: { id: c.socketId } });
+        }
+      }
+
+      // ── Finish line ──
+      if (c.x >= FINISH_X) {
         c.finished = true;
         this.finishCount++;
         c.finishRank = this.finishCount;
-        const rankPts = [1000, 700, 500, 300, 200, 150];
+        const rankPts = [1000, 700, 500, 350, 250, 200, 150];
         const pts = rankPts[c.finishRank - 1] ?? 100;
         this.addScore(c.socketId, pts);
         this.pendingEvents.push({
           type: 'cart:finished',
           data: { id: c.socketId, rank: c.finishRank, points: pts },
         });
-        if (this.finishCount >= this.carts.size) {
+        if (!this.endingEarly && this.finishCount >= this.carts.size) {
+          this.endingEarly = true;
           setTimeout(() => this.endEarly(), 1800);
         }
       }
     }
 
-    // Items
-    for (const it of this.items) {
-      if (!it.active && now >= it.respawnAt) it.active = true;
-      if (!it.active) continue;
-      const itGroundY = groundAt(it.x);
-      for (const c of this.carts.values()) {
-        if (c.finished) continue;
-        const cartCenterX = c.x + CART_W / 2;
-        const cartCenterY = c.y + CART_H / 2;
-        if (Math.abs(cartCenterX - it.x) < 28 && Math.abs(cartCenterY - (itGroundY - 24)) < 36) {
-          it.active = false;
-          it.respawnAt = now + 6000;
-          if (it.type === 'turbo') {
-            c.boostUntil = now + 3000;
-            this.pendingEvents.push({ type: 'cart:turbo', data: { id: c.socketId } });
-          } else {
-            c.spinOutUntil = now + 1200;
-            this.pendingEvents.push({ type: 'cart:banana', data: { id: c.socketId } });
-          }
-        }
-      }
-    }
-
-    // Cart-cart collision
-    const arr = [...this.carts.values()];
+    // Cart-cart collisions (top-down xz plane)
+    const arr = [...this.carts.values()].filter(c => !c.finished);
     for (let i = 0; i < arr.length; i++) {
       for (let j = i + 1; j < arr.length; j++) {
         const a = arr[i], b = arr[j];
-        if (a.finished || b.finished) continue;
         const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        if (Math.abs(dx) < CART_W && Math.abs(dy) < CART_H) {
-          const overlap = CART_W - Math.abs(dx);
-          if (dx >= 0) { a.x -= overlap * 0.5; b.x += overlap * 0.5; }
-          else         { a.x += overlap * 0.5; b.x -= overlap * 0.5; }
-          // Faster cart pushes slower one
+        const dz = b.z - a.z;
+        const d2 = dx * dx + dz * dz;
+        const minD = CART_R * 2;
+        if (d2 < minD * minD && d2 > 0) {
+          const d = Math.sqrt(d2);
+          const overlap = minD - d;
+          const nx = dx / d, nz = dz / d;
+          a.x -= nx * overlap * 0.5;
+          a.z -= nz * overlap * 0.5;
+          b.x += nx * overlap * 0.5;
+          b.z += nz * overlap * 0.5;
+          // Push velocity transfer
           if (Math.abs(a.vx) > Math.abs(b.vx)) {
-            b.vx = a.vx * 0.65;
-            a.vx *= 0.85;
+            b.vx = a.vx * 0.7;
+            a.vx *= 0.9;
           } else {
-            a.vx = b.vx * 0.65;
-            b.vx *= 0.85;
+            a.vx = b.vx * 0.7;
+            b.vx *= 0.9;
           }
         }
       }
@@ -307,15 +376,16 @@ export class ShoppingCart extends BaseGame {
       id: c.socketId,
       x: Math.round(c.x * 10) / 10,
       y: Math.round(c.y * 10) / 10,
-      a: Math.round(c.angle * 100) / 100,
+      z: Math.round(c.z * 10) / 10,
       vx: Math.round(c.vx),
       bs: now < c.boostUntil ? 1 : 0,
       sp: now < c.spinOutUntil ? 1 : 0,
+      og: c.onGround ? 1 : 0,
       fn: c.finished ? c.finishRank : 0,
     }));
-    const items = this.items.map(it => ({ id: it.id, x: it.x, t: it.type, a: it.active ? 1 : 0 }));
+    const pickups = this.pickups.map(p => ({ id: p.id, a: p.active ? 1 : 0 }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.io.to(this.config.roomId).emit('cart:state' as any, { t: now, carts, items });
+    this.io.to(this.config.roomId).emit('cart:state' as any, { t: now, carts, pickups });
 
     for (const ev of this.pendingEvents) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -329,19 +399,18 @@ export class ShoppingCart extends BaseGame {
   protected override triggerChaos(): void {
     const roll = Math.random();
     if (roll < 0.5) {
-      // Boost everyone briefly
       for (const c of this.carts.values()) {
         if (!c.finished) c.boostUntil = Date.now() + 2500;
       }
       this.io.to(this.config.roomId).emit('chaos:announcement', '🚀 EVERYONE GETS TURBO!');
     } else {
-      // Banana rain — spin out random half of players
+      // Spin out random half
       const arr = [...this.carts.values()].filter(c => !c.finished);
       arr.sort(() => Math.random() - 0.5).slice(0, Math.ceil(arr.length / 2)).forEach(c => {
         c.spinOutUntil = Date.now() + 1500;
-        this.pendingEvents.push({ type: 'cart:banana', data: { id: c.socketId } });
+        this.pendingEvents.push({ type: 'cart:hit', data: { id: c.socketId, obstacleId: 'chaos' } });
       });
-      this.io.to(this.config.roomId).emit('chaos:announcement', '🍌 BANANA RAIN!');
+      this.io.to(this.config.roomId).emit('chaos:announcement', '🍌 BANANA STORM!');
     }
   }
 
@@ -352,10 +421,9 @@ export class ShoppingCart extends BaseGame {
   }
 
   protected buildResults(): GameResults {
-    // Award points for distance traveled if not finished
     for (const c of this.carts.values()) {
       if (!c.finished) {
-        const distPts = Math.round((c.x / FINISH_X) * 80);
+        const distPts = Math.round((c.x / FINISH_X) * 100);
         this.addScore(c.socketId, distPts);
       }
     }
@@ -371,8 +439,8 @@ export class ShoppingCart extends BaseGame {
       stats: { finishRank: this.carts.get(entry.playerId)?.finishRank ?? 0 },
     }));
     const highlights: string[] = [];
-    if (this.finishCount > 0) highlights.push(`🏁 ${this.finishCount} finishers!`);
-    else highlights.push('⏱️ Nobody finished — ran out of time!');
+    if (this.finishCount > 0) highlights.push(`🏁 ${this.finishCount} crossed the line!`);
+    else highlights.push('⏱️ Nobody finished — gnarly run!');
     return {
       gameType: this.gameType,
       scores: resultPlayers,
