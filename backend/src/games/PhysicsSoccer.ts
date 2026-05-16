@@ -29,9 +29,9 @@ const PL_ACCEL      = 52;
 const PL_MAX_SPD    = 17;
 const PL_BOOST_SPD  = 34;
 const PL_DRAG       = 0.80;
-const BOOST_DUR_MS  = 380;
+const BOOST_DUR_MS  = 700;
 const BOOST_CD_MS   = 3800;
-const DASH_IMPULSE  = 16;
+const DASH_IMPULSE  = 25;
 
 // Ball-player collision
 const COL_REST = 1.5;

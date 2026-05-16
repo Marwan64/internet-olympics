@@ -14,8 +14,8 @@ const BALL_R_BASE = 1.1;
 const PL_R = 0.85;
 const PL_DRAG = 0.80;
 const PL_ACCEL = 34;
-const PL_MAX_SPD = 11;
-const PL_BOOST_SPD = 24;
+const PL_MAX_SPD = 17;
+const PL_BOOST_SPD = 34;
 const DT_CAP = 0.05;
 
 const TEAM_COLOR  = [0xef4444, 0x3b82f6] as const; // red, blue
@@ -335,6 +335,7 @@ export default function PhysicsSoccer() {
     // ── Input ─────────────────────────────────────────────────────────────────
     const keys = { w: false, a: false, s: false, d: false, shift: false };
     let shiftEdge = false;
+    let pendingDash = false;
     let lastSend  = 0;
     let boostCDUntil = 0;
 
@@ -425,16 +426,17 @@ export default function PhysicsSoccer() {
         const len = Math.hypot(dx, dz);
         if (len > 0) { dx /= len; dz /= len; }
 
-        // Dash on shift rising edge or touch dash button
+        // Dash rising edge — latch until the next network send so it isn't missed
         const isDash = (keys.shift && !shiftEdge) || touchDashRef.current;
-        touchDashRef.current = false; // consume touch dash
+        touchDashRef.current = false;
         shiftEdge = keys.shift;
+        if (isDash) pendingDash = true;
 
         if (isDash && now > boostCDUntil) {
           local.boosting = true;
-          local.boostUntil = now + 380;
+          local.boostUntil = now + 700;
           boostCDUntil = now + 3800;
-          if (len > 0) { local.vx += dx * 16; local.vz += dz * 16; }
+          if (len > 0) { local.vx += dx * 25; local.vz += dz * 25; }
         }
         if (now > local.boostUntil) local.boosting = false;
 
@@ -454,10 +456,11 @@ export default function PhysicsSoccer() {
         const cd = boostCDUntil - now;
         setBoostPct(cd > 0 ? Math.max(0, 1 - cd / 3800) : 1);
 
-        // Send input at 20 Hz
+        // Send input at 20 Hz — flush pendingDash so the rising edge is never dropped
         if (now - lastSend > 50) {
           lastSend = now;
-          sendInput('soccer_input', { dx, dz, boost: local.boosting, dash: isDash });
+          sendInput('soccer_input', { dx, dz, boost: local.boosting, dash: pendingDash });
+          pendingDash = false;
         }
       }
 
