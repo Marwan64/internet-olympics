@@ -30,7 +30,7 @@ function Particle({ delay, color }: { delay: number; color: string }) {
         '--drift': `${drift}px`,
       } as React.CSSProperties}
       animate={{
-        y: [0, -(window?.innerHeight ?? 800) - 50],
+        y: [0, -(typeof window !== 'undefined' ? window.innerHeight : 800) - 50],
         x: [0, drift],
         opacity: [0, 0.8, 0.8, 0],
       }}
