@@ -6,6 +6,7 @@ import MarioGame from './MarioGame';
 import KnockbackArena from './KnockbackArena';
 import ShoppingCart from './ShoppingCart';
 import RageObby from './RageObby';
+import FloorIsLava from './FloorIsLava';
 import { useSocketActions } from '@/hooks/useSocket';
 import { ChaosAnnouncement, ChaosFlash, DiscoFilter } from '@/components/ui/ChaosOverlay';
 import ToastContainer from '@/components/ui/ToastContainer';
@@ -182,6 +183,7 @@ function GameIntroScreen({ gameState }: { gameState: GameState }) {
     'knockback-arena': { name: 'Knockback Arena', emoji: '👊', desc: 'Punch and dash everyone off the platforms. Last one standing wins.' },
     'shopping-cart-racing': { name: 'Shopping Cart Racing', emoji: '🛒', desc: 'Bumpy downhill race. Grab turbos, dodge trees, reach the flag first!' },
     'rage-obby': { name: 'Rage Obby', emoji: '😤', desc: 'Jump across platforms, dodge spikes, ride moving ledges. Die → go back to your last checkpoint!' },
+    'floor-is-lava': { name: 'Floor is Lava!', emoji: '🌋', desc: 'The lava is rising! Climb the tower, jump between platforms, and be the last one alive. WASD + Space to move.' },
   };
 
   const info = gameNames[gameState.type] ?? { name: gameState.type, emoji: '🎮', desc: 'Get ready!' };
@@ -308,7 +310,8 @@ export default function GameScreen() {
                   {gameState.type === 'knockback-arena' && <KnockbackArena />}
                   {gameState.type === 'shopping-cart-racing' && <ShoppingCart />}
                   {gameState.type === 'rage-obby' && <RageObby />}
-                  {!['mario-race', 'knockback-arena', 'shopping-cart-racing', 'rage-obby'].includes(gameState.type) && (
+                  {gameState.type === 'floor-is-lava' && <FloorIsLava />}
+                  {!['mario-race', 'knockback-arena', 'shopping-cart-racing', 'rage-obby', 'floor-is-lava'].includes(gameState.type) && (
                     <div className="flex items-center justify-center h-64 text-white/50 text-xl">
                       Coming soon: {gameState.type} 🚧
                     </div>

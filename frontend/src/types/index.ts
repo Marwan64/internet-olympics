@@ -53,7 +53,8 @@ export type GameType =
   | 'mario-race'
   | 'knockback-arena'
   | 'shopping-cart-racing'
-  | 'rage-obby';
+  | 'rage-obby'
+  | 'floor-is-lava';
 
 export type RoomStatus =
   | 'lobby' | 'countdown' | 'intro' | 'playing' | 'results' | 'podium' | 'ended';

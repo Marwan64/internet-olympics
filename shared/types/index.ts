@@ -56,6 +56,7 @@ export type GameType =
   | 'knockback-arena'
   | 'shopping-cart-racing'
   | 'rage-obby'
+  | 'floor-is-lava'
   | 'speed-typing'
   | 'fake-trivia'
   | 'drawing'
