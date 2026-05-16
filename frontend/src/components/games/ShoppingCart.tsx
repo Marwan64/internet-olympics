@@ -25,18 +25,25 @@ const OBSTACLES = [
   { id: 'o0', x: 600, z: -120, type: 'tree' as const },
   { id: 'o1', x: 850, z: 80, type: 'rock' as const },
   { id: 'o2', x: 1100, z: -40, type: 'tree' as const },
-  { id: 'o3', x: 1800, z: 100, type: 'tree' as const },
+  { id: 'o3', x: 1800, z: 100, type: 'shelf' as const },
   { id: 'o4', x: 2100, z: -160, type: 'rock' as const },
   { id: 'o5', x: 2400, z: 50, type: 'tree' as const },
-  { id: 'o6', x: 3100, z: -100, type: 'rock' as const },
+  { id: 'o6', x: 3100, z: -100, type: 'shelf' as const },
   { id: 'o7', x: 3400, z: 130, type: 'tree' as const },
-  { id: 'o8', x: 3700, z: 0, type: 'tree' as const },
+  { id: 'o8', x: 3700, z: 0, type: 'shelf' as const },
   { id: 'o9', x: 4500, z: -150, type: 'rock' as const },
   { id: 'o10', x: 4800, z: 90, type: 'tree' as const },
-  { id: 'o11', x: 5100, z: -60, type: 'tree' as const },
+  { id: 'o11', x: 5100, z: -60, type: 'shelf' as const },
   { id: 'o12', x: 5300, z: 160, type: 'rock' as const },
   { id: 'o13', x: 5900, z: -80, type: 'tree' as const },
   { id: 'o14', x: 6200, z: 50, type: 'rock' as const },
+];
+
+const FORKLIFTS = [
+  { id: 'f0', x: 1600, zMin: -160, zMax: 160 },
+  { id: 'f1', x: 3200, zMin: -140, zMax: 140 },
+  { id: 'f2', x: 4900, zMin: -180, zMax: 80 },
+  { id: 'f3', x: 6000, zMin: -100, zMax: 180 },
 ];
 
 const PICKUPS = [
@@ -60,9 +67,77 @@ function terrainHeight(x: number): number {
   return h;
 }
 
+// ── Particle System ───────────────────────────────────────────────────────────
+
+interface Particle { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; maxLife: number; size: number; type: 'smoke' | 'spark' | 'boost' }
+
+function updateParticles(particles: Particle[], dt: number): void {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.z += p.vz * dt;
+    if (p.type === 'smoke') p.vy += 8 * dt; // slight float up
+    if (p.type === 'spark') p.vy += 200 * dt; // sparks arc
+  }
+}
+
+function spawnDriftSmoke(particles: Particle[], x: number, y: number, z: number, side: number): void {
+  for (let i = 0; i < 3; i++) {
+    particles.push({
+      x: x + (Math.random() - 0.5) * 10,
+      y: y + 2,
+      z: z + side * 12 + (Math.random() - 0.5) * 8,
+      vx: -30 - Math.random() * 20,
+      vy: 5 + Math.random() * 15,
+      vz: (Math.random() - 0.5) * 30,
+      life: 0.6 + Math.random() * 0.4,
+      maxLife: 1.0,
+      size: 6 + Math.random() * 8,
+      type: 'smoke',
+    });
+  }
+}
+
+function spawnDriftSparks(particles: Particle[], x: number, y: number, z: number): void {
+  for (let i = 0; i < 5; i++) {
+    particles.push({
+      x, y: y + 3, z,
+      vx: -80 - Math.random() * 60,
+      vy: -20 - Math.random() * 40,
+      vz: (Math.random() - 0.5) * 60,
+      life: 0.3 + Math.random() * 0.2,
+      maxLife: 0.5,
+      size: 2,
+      type: 'spark',
+    });
+  }
+}
+
+function spawnBoostFlame(particles: Particle[], x: number, y: number, z: number): void {
+  for (let i = 0; i < 4; i++) {
+    particles.push({
+      x: x - 15,
+      y: y + 8 + (Math.random() - 0.5) * 6,
+      z: z + (Math.random() - 0.5) * 10,
+      vx: -120 - Math.random() * 80,
+      vy: (Math.random() - 0.5) * 20,
+      vz: (Math.random() - 0.5) * 20,
+      life: 0.15 + Math.random() * 0.15,
+      maxLife: 0.3,
+      size: 5 + Math.random() * 5,
+      type: 'boost',
+    });
+  }
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 interface RemoteCart {
-  id: string; x: number; y: number; z: number; vx: number;
-  bs: number; sp: number; og: number; fn: number;
+  id: string; x: number; y: number; z: number; vx: number; vz: number; yaw: number;
+  bs: number; db: number; sp: number; dr: number; dc: number; og: number; fn: number;
 }
 interface Snapshot { t: number; clientT: number; carts: Map<string, RemoteCart> }
 
@@ -75,55 +150,82 @@ export default function ShoppingCart() {
   const snapshotsRef = useRef<Snapshot[]>([]);
   const ownServerRef = useRef<RemoteCart | null>(null);
   const finishMsgRef = useRef('');
-  const lastInputRef = useRef({ accel: false, brake: false, left: false, right: false });
-  const inputRef = useRef({ accel: false, brake: false, left: false, right: false });
+  const inputRef = useRef({ accel: false, brake: false, left: false, right: false, drift: false });
+  const lastInputRef = useRef({ accel: false, brake: false, left: false, right: false, drift: false });
   const lastFrameTimeRef = useRef<number>(0);
-  const smoothLookRef = useRef({ x: 0, y: 0, z: 0 });
+
+  // Camera state
+  const camYawRef = useRef(0);           // camera yaw (follows cart heading)
+  const camPosRef = useRef(new THREE.Vector3(-160, 100, 0));
+  const camLookRef = useRef(new THREE.Vector3(0, 0, 0));
+  const camShakeRef = useRef(0);         // shake intensity, decays
+
+  // Cart local state
+  const cartYawRef = useRef(0);          // smooth local yaw for rendering
+  const particlesRef = useRef<Particle[]>([]);
+  const forkMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
+
   const sceneStateRef = useRef<{
     renderer: THREE.WebGLRenderer;
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
     cartMeshes: Map<string, THREE.Group>;
     pickupMeshes: Map<string, THREE.Mesh>;
-    boostFlames: Map<string, THREE.Mesh>;
+    particleMeshes: THREE.Points[];
     animId: number;
   } | null>(null);
 
-  // ── Set up three.js scene once ────────────────────────────────────────────
+  // ── Build scene ───────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!mountRef.current) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#87ceeb');
-    scene.fog = new THREE.Fog('#87ceeb', 600, 2200);
+    scene.background = new THREE.Color('#1a0a2e');
+    scene.fog = new THREE.FogExp2('#1a0a2e', 0.0006);
 
     const camera = new THREE.PerspectiveCamera(70, CANVAS_W / CANVAS_H, 1, 5000);
-    camera.position.set(-150, 120, 0);
-    camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(CANVAS_W, CANVAS_H);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = false;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
     mountRef.current.appendChild(renderer.domElement);
     renderer.domElement.style.maxWidth = '100%';
     renderer.domElement.style.borderRadius = '12px';
 
     // ── Lighting ──
-    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambient);
-    const sun = new THREE.DirectionalLight(0xfff5e6, 1.0);
-    sun.position.set(300, 800, -300);
+    scene.add(new THREE.AmbientLight(0x220033, 1.2));
+    const sun = new THREE.DirectionalLight(0xffe4ff, 1.4);
+    sun.position.set(200, 600, -200);
     scene.add(sun);
 
-    // ── Terrain (track) — a long strip with displaced vertices ──
+    // Neon strip lights along track sides
+    const neonColors = [0xff00ff, 0x00ffff, 0xff6600, 0x00ff88];
+    for (let i = 0; i < 28; i++) {
+      const x = 200 + i * 240;
+      const side = i % 2 === 0 ? -1 : 1;
+      const col = neonColors[i % neonColors.length];
+      const light = new THREE.PointLight(col, 1.5, 280);
+      light.position.set(x, terrainHeight(x) + 40, side * (LANE_HALF + 10));
+      scene.add(light);
+
+      // Glowing pillar
+      const pillar = new THREE.Mesh(
+        new THREE.CylinderGeometry(3, 3, 50, 6),
+        new THREE.MeshBasicMaterial({ color: col })
+      );
+      pillar.position.set(x, terrainHeight(x) + 25, side * (LANE_HALF + 10));
+      scene.add(pillar);
+    }
+
+    // ── Track (tiled floor pattern) ──
     const TRACK_WIDTH_VIS = LANE_HALF * 2 + 80;
     const segments = 300;
     const trackGeom = new THREE.PlaneGeometry(TRACK_LENGTH, TRACK_WIDTH_VIS, segments, 8);
-    // Rotate so the plane is on the ground, x runs forward, z runs lateral
     trackGeom.rotateX(-Math.PI / 2);
-    // Shift so x=0 is start
     trackGeom.translate(TRACK_LENGTH / 2, 0, 0);
     const pos = trackGeom.attributes.position;
     for (let i = 0; i < pos.count; i++) {
@@ -133,34 +235,72 @@ export default function ShoppingCart() {
     pos.needsUpdate = true;
     trackGeom.computeVertexNormals();
 
-    const trackMat = new THREE.MeshLambertMaterial({ color: 0xf5f5fa });
-    const track = new THREE.Mesh(trackGeom, trackMat);
-    scene.add(track);
+    // Supermarket floor — dark tile texture via canvas
+    const floorCanvas = document.createElement('canvas');
+    floorCanvas.width = 128; floorCanvas.height = 128;
+    const fc = floorCanvas.getContext('2d')!;
+    fc.fillStyle = '#1c1c2e';
+    fc.fillRect(0, 0, 128, 128);
+    fc.strokeStyle = '#2a2a4a';
+    fc.lineWidth = 2;
+    for (let i = 0; i <= 4; i++) { fc.beginPath(); fc.moveTo(i * 32, 0); fc.lineTo(i * 32, 128); fc.stroke(); }
+    for (let i = 0; i <= 4; i++) { fc.beginPath(); fc.moveTo(0, i * 32); fc.lineTo(128, i * 32); fc.stroke(); }
+    const floorTex = new THREE.CanvasTexture(floorCanvas);
+    floorTex.wrapS = THREE.RepeatWrapping;
+    floorTex.wrapT = THREE.RepeatWrapping;
+    floorTex.repeat.set(TRACK_LENGTH / 80, TRACK_WIDTH_VIS / 80);
+    const trackMat = new THREE.MeshLambertMaterial({ map: floorTex });
+    scene.add(new THREE.Mesh(trackGeom, trackMat));
 
-    // ── Side walls/snow banks ──
-    const wallGeom = new THREE.BoxGeometry(TRACK_LENGTH, 30, 25);
-    const wallMat = new THREE.MeshLambertMaterial({ color: 0xb8c5d6 });
-    const wallL = new THREE.Mesh(wallGeom, wallMat);
-    const wallR = new THREE.Mesh(wallGeom, wallMat);
-    // Walls sit above the terrain at x=center; we'll keep them simple
-    wallL.position.set(TRACK_LENGTH / 2, -TRACK_LENGTH * 0.07, -LANE_HALF - 25);
-    wallR.position.set(TRACK_LENGTH / 2, -TRACK_LENGTH * 0.07, LANE_HALF + 25);
-    scene.add(wallL);
-    scene.add(wallR);
+    // ── Lane markings (center line + edges) ──
+    const lineGeom = new THREE.PlaneGeometry(TRACK_LENGTH, 4, 1, 1);
+    lineGeom.rotateX(-Math.PI / 2);
+    lineGeom.translate(TRACK_LENGTH / 2, 0.5, 0);
+    // shift Y to terrain; approximate flat for the marking
+    scene.add(new THREE.Mesh(lineGeom, new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.6 })));
 
-    // ── Ramps (visible blue chevrons on the track) ──
+    // ── Side barriers with neon trim ──
+    const barrierMat = new THREE.MeshLambertMaterial({ color: 0x111128 });
+    const barrierH = 35;
+    const barrierGeom = new THREE.BoxGeometry(TRACK_LENGTH, barrierH, 18);
+    const barrierL = new THREE.Mesh(barrierGeom, barrierMat);
+    barrierL.position.set(TRACK_LENGTH / 2, -TRACK_LENGTH * 0.07 + barrierH / 2, -LANE_HALF - 14);
+    scene.add(barrierL);
+    const barrierR = new THREE.Mesh(barrierGeom, barrierMat);
+    barrierR.position.set(TRACK_LENGTH / 2, -TRACK_LENGTH * 0.07 + barrierH / 2, LANE_HALF + 14);
+    scene.add(barrierR);
+
+    // Neon trim on barriers
+    for (const side of [-1, 1]) {
+      const trimGeom = new THREE.BoxGeometry(TRACK_LENGTH, 4, 2);
+      const trimMat = new THREE.MeshBasicMaterial({ color: side < 0 ? 0xff00ff : 0x00ffff });
+      const trim = new THREE.Mesh(trimGeom, trimMat);
+      trim.position.set(TRACK_LENGTH / 2, -TRACK_LENGTH * 0.07 + barrierH, side * (LANE_HALF + 14));
+      scene.add(trim);
+    }
+
+    // ── Ramps (glowing chevrons) ──
     for (const r of RAMPS) {
-      const rampGeom = new THREE.BoxGeometry(r.halfWidth * 2, 4, LANE_HALF * 1.6);
-      const rampMat = new THREE.MeshLambertMaterial({ color: 0x60a5fa });
-      const rampMesh = new THREE.Mesh(rampGeom, rampMat);
-      rampMesh.position.set(r.x, terrainHeight(r.x) + 4, 0);
+      const ty = terrainHeight(r.x);
+      const rampMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(r.halfWidth * 2, 5, LANE_HALF * 1.8),
+        new THREE.MeshLambertMaterial({ color: 0x0055ff, emissive: 0x0033aa, emissiveIntensity: 0.6 })
+      );
+      rampMesh.position.set(r.x, ty + 4, 0);
       scene.add(rampMesh);
-      // Chevron stripe
-      const stripeGeom = new THREE.BoxGeometry(20, 2, LANE_HALF * 1.6);
-      const stripeMat = new THREE.MeshBasicMaterial({ color: 0xfde047 });
-      const stripe = new THREE.Mesh(stripeGeom, stripeMat);
-      stripe.position.set(r.x, terrainHeight(r.x) + 6, 0);
-      scene.add(stripe);
+      // Arrow stripes
+      for (let s = -1; s <= 1; s += 2) {
+        const stripe = new THREE.Mesh(
+          new THREE.BoxGeometry(12, 6, LANE_HALF * 0.6),
+          new THREE.MeshBasicMaterial({ color: 0x00ffff })
+        );
+        stripe.position.set(r.x + s * 30, ty + 7, s * LANE_HALF * 0.3);
+        scene.add(stripe);
+      }
+      // Light on ramp
+      const rl = new THREE.PointLight(0x0088ff, 2.5, 200);
+      rl.position.set(r.x, ty + 40, 0);
+      scene.add(rl);
     }
 
     // ── Obstacles ──
@@ -168,120 +308,175 @@ export default function ShoppingCart() {
       const ty = terrainHeight(o.x);
       let mesh: THREE.Object3D;
       if (o.type === 'tree') {
-        const trunk = new THREE.Mesh(
-          new THREE.CylinderGeometry(6, 8, 30, 8),
-          new THREE.MeshLambertMaterial({ color: 0x6b3410 })
-        );
-        trunk.position.y = 15;
-        const leaves = new THREE.Mesh(
-          new THREE.ConeGeometry(30, 70, 8),
-          new THREE.MeshLambertMaterial({ color: 0x166534 })
-        );
-        leaves.position.y = 50;
-        const group = new THREE.Group();
-        group.add(trunk);
-        group.add(leaves);
-        mesh = group;
+        const g = new THREE.Group();
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(5, 7, 28, 7),
+          new THREE.MeshLambertMaterial({ color: 0x3d1a08 }));
+        trunk.position.y = 14;
+        const leaves = new THREE.Mesh(new THREE.ConeGeometry(28, 65, 7),
+          new THREE.MeshLambertMaterial({ color: 0x0a4d1a, emissive: 0x003308, emissiveIntensity: 0.3 }));
+        leaves.position.y = 48;
+        g.add(trunk); g.add(leaves);
+        mesh = g;
+      } else if (o.type === 'shelf') {
+        // Supermarket shelf unit
+        const g = new THREE.Group();
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(20, 70, 60),
+          new THREE.MeshLambertMaterial({ color: 0x888899 }));
+        frame.position.y = 35;
+        g.add(frame);
+        // Shelves
+        for (let sh = 0; sh < 3; sh++) {
+          const shelf = new THREE.Mesh(new THREE.BoxGeometry(22, 3, 62),
+            new THREE.MeshLambertMaterial({ color: 0xaaaacc }));
+          shelf.position.set(0, 16 + sh * 20, 0);
+          g.add(shelf);
+          // Colorful product blocks on shelves
+          for (let pr = 0; pr < 4; pr++) {
+            const prodCol = [0xff4444, 0x44ff88, 0xffcc00, 0x4488ff][pr];
+            const prod = new THREE.Mesh(new THREE.BoxGeometry(6, 10, 10),
+              new THREE.MeshLambertMaterial({ color: prodCol, emissive: prodCol, emissiveIntensity: 0.2 }));
+            prod.position.set(2, 22 + sh * 20, -22 + pr * 14);
+            g.add(prod);
+          }
+        }
+        mesh = g;
       } else {
         mesh = new THREE.Mesh(
           new THREE.DodecahedronGeometry(20, 0),
-          new THREE.MeshLambertMaterial({ color: 0x6b7280 })
+          new THREE.MeshLambertMaterial({ color: 0x4a4a5a })
         );
         mesh.position.y = 10;
       }
       mesh.position.x = o.x;
       mesh.position.z = o.z;
-      mesh.position.y += ty;
+      (mesh.position as THREE.Vector3).y += ty;
       scene.add(mesh);
     }
 
-    // ── Decorative trees outside the track ──
-    for (let i = 0; i < 60; i++) {
-      const x = Math.random() * TRACK_LENGTH;
-      const side = Math.random() < 0.5 ? -1 : 1;
-      const z = side * (LANE_HALF + 80 + Math.random() * 200);
-      const ty = terrainHeight(x);
-      const trunk = new THREE.Mesh(
-        new THREE.CylinderGeometry(5, 7, 24, 6),
-        new THREE.MeshLambertMaterial({ color: 0x6b3410 })
-      );
-      trunk.position.set(x, ty + 12, z);
-      scene.add(trunk);
-      const leaves = new THREE.Mesh(
-        new THREE.ConeGeometry(22, 55, 6),
-        new THREE.MeshLambertMaterial({ color: 0x14532d })
-      );
-      leaves.position.set(x, ty + 45, z);
-      scene.add(leaves);
+    // ── Forklifts ──
+    const forkMeshes = forkMeshesRef.current;
+    for (const f of FORKLIFTS) {
+      const ty = terrainHeight(f.x);
+      const g = new THREE.Group();
+      // Body
+      const body = new THREE.Mesh(new THREE.BoxGeometry(35, 30, 22),
+        new THREE.MeshLambertMaterial({ color: 0xffaa00, emissive: 0x885500, emissiveIntensity: 0.3 }));
+      body.position.y = 18;
+      g.add(body);
+      // Forks
+      for (const fz of [-8, 8]) {
+        const fork = new THREE.Mesh(new THREE.BoxGeometry(30, 3, 4),
+          new THREE.MeshLambertMaterial({ color: 0xcccccc }));
+        fork.position.set(18, 8, fz);
+        g.add(fork);
+      }
+      // Warning light
+      const warnLight = new THREE.PointLight(0xff6600, 1.5, 80);
+      warnLight.position.set(0, 45, 0);
+      g.add(warnLight);
+      // Stripes
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(37, 6, 24),
+        new THREE.MeshBasicMaterial({ color: 0x000000 }));
+      stripe.position.y = 18;
+      g.add(stripe);
+      g.position.set(f.x, ty, (f.zMin + f.zMax) / 2);
+      scene.add(g);
+      forkMeshes.set(f.id, g);
     }
 
-    // ── Pickup meshes (turbo crates) ──
+    // ── Neon signs on barrier walls ──
+    const signTexts = ['SUPERMARKET', 'SPEED ZONE', 'NO BRAKES', 'DANGER', 'FRESH DEALS'];
+    for (let i = 0; i < 10; i++) {
+      const signCanvas = document.createElement('canvas');
+      signCanvas.width = 256; signCanvas.height = 64;
+      const sc = signCanvas.getContext('2d')!;
+      const col = neonColors[i % neonColors.length];
+      const hexCol = '#' + col.toString(16).padStart(6, '0');
+      sc.fillStyle = '#000011';
+      sc.fillRect(0, 0, 256, 64);
+      sc.strokeStyle = hexCol;
+      sc.lineWidth = 3;
+      sc.strokeRect(3, 3, 250, 58);
+      sc.fillStyle = hexCol;
+      sc.font = 'bold 20px monospace';
+      sc.textAlign = 'center';
+      sc.fillText(signTexts[i % signTexts.length], 128, 40);
+      const signTex = new THREE.CanvasTexture(signCanvas);
+      const signMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(100, 25),
+        new THREE.MeshBasicMaterial({ map: signTex, side: THREE.DoubleSide })
+      );
+      const x = 400 + i * 620;
+      const side = i % 2 === 0 ? -1 : 1;
+      const ty = terrainHeight(x);
+      signMesh.position.set(x, ty + 60, side * (LANE_HALF + 5));
+      signMesh.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+      scene.add(signMesh);
+    }
+
+    // ── Pickup meshes (glowing turbo crates) ──
     const pickupMeshes = new Map<string, THREE.Mesh>();
     for (const p of PICKUPS) {
       const ty = terrainHeight(p.x);
       const m = new THREE.Mesh(
-        new THREE.BoxGeometry(24, 24, 24),
-        new THREE.MeshLambertMaterial({ color: 0xef4444, emissive: 0x991b1b, emissiveIntensity: 0.5 })
+        new THREE.OctahedronGeometry(14, 0),
+        new THREE.MeshLambertMaterial({ color: 0xff6600, emissive: 0xff3300, emissiveIntensity: 0.8 })
       );
-      m.position.set(p.x, ty + 30, p.z);
+      m.position.set(p.x, ty + 28, p.z);
       scene.add(m);
+      const pLight = new THREE.PointLight(0xff4400, 1.8, 100);
+      pLight.position.set(p.x, ty + 28, p.z);
+      scene.add(pLight);
       pickupMeshes.set(p.id, m);
     }
 
-    // ── Finish line gate ──
+    // ── Finish gate ──
     const fy = terrainHeight(FINISH_X);
-    const gatePost = new THREE.BoxGeometry(8, 200, 8);
-    const gateMat = new THREE.MeshLambertMaterial({ color: 0xfde047 });
-    const postL = new THREE.Mesh(gatePost, gateMat);
-    postL.position.set(FINISH_X, fy + 100, -LANE_HALF);
-    scene.add(postL);
-    const postR = new THREE.Mesh(gatePost, gateMat);
-    postR.position.set(FINISH_X, fy + 100, LANE_HALF);
-    scene.add(postR);
-    const banner = new THREE.Mesh(
-      new THREE.BoxGeometry(8, 30, LANE_HALF * 2),
-      new THREE.MeshLambertMaterial({ color: 0x000000 })
-    );
-    banner.position.set(FINISH_X, fy + 180, 0);
+    const gateMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+    for (const zs of [-LANE_HALF, LANE_HALF]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(8, 180, 8), gateMat);
+      post.position.set(FINISH_X, fy + 90, zs);
+      scene.add(post);
+    }
+    const banner = new THREE.Mesh(new THREE.BoxGeometry(10, 28, LANE_HALF * 2), new THREE.MeshBasicMaterial({ color: 0x222222 }));
+    banner.position.set(FINISH_X, fy + 170, 0);
     scene.add(banner);
-    // Checkered banner pattern: a few yellow squares
     for (let i = -5; i <= 5; i++) {
       if (i % 2 === 0) continue;
-      const sq = new THREE.Mesh(
-        new THREE.BoxGeometry(9, 14, 38),
-        new THREE.MeshBasicMaterial({ color: 0xffffff })
-      );
-      sq.position.set(FINISH_X, fy + 180, i * 40);
+      const sq = new THREE.Mesh(new THREE.BoxGeometry(10, 12, 36), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      sq.position.set(FINISH_X, fy + 170, i * 38);
       scene.add(sq);
     }
+    // Finish light
+    const finLight = new THREE.PointLight(0xffff00, 3, 300);
+    finLight.position.set(FINISH_X, fy + 150, 0);
+    scene.add(finLight);
 
     sceneStateRef.current = {
       renderer, scene, camera,
       cartMeshes: new Map(),
       pickupMeshes,
-      boostFlames: new Map(),
+      particleMeshes: [],
       animId: 0,
     };
 
-    // Animation loop
     const animate = () => {
-      const state = sceneStateRef.current;
-      if (!state) return;
+      const s = sceneStateRef.current;
+      if (!s) return;
       drawFrame();
-      state.animId = requestAnimationFrame(animate);
+      s.animId = requestAnimationFrame(animate);
     };
     animate();
 
     return () => {
-      const state = sceneStateRef.current;
-      if (!state) return;
-      cancelAnimationFrame(state.animId);
-      state.renderer.dispose();
-      if (mountRef.current && state.renderer.domElement.parentNode === mountRef.current) {
-        mountRef.current.removeChild(state.renderer.domElement);
+      const s = sceneStateRef.current;
+      if (!s) return;
+      cancelAnimationFrame(s.animId);
+      s.renderer.dispose();
+      if (mountRef.current && s.renderer.domElement.parentNode === mountRef.current) {
+        mountRef.current.removeChild(s.renderer.domElement);
       }
-      // Dispose geometries/materials
-      state.scene.traverse(obj => {
+      s.scene.traverse(obj => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const m = obj as any;
         if (m.geometry?.dispose) m.geometry.dispose();
@@ -291,7 +486,7 @@ export default function ShoppingCart() {
     };
   }, []);
 
-  // ── Build/update cart meshes from room state ──────────────────────────────
+  // ── Cart mesh builder ─────────────────────────────────────────────────────
 
   const ensureCartMesh = useCallback((id: string, color: number): THREE.Group => {
     const state = sceneStateRef.current;
@@ -300,60 +495,64 @@ export default function ShoppingCart() {
     if (group) return group;
     group = new THREE.Group();
 
-    // Basket (the cart body)
     const basketMat = new THREE.MeshLambertMaterial({ color });
-    const basket = new THREE.Mesh(new THREE.BoxGeometry(40, 30, 28), basketMat);
+    const basket = new THREE.Mesh(new THREE.BoxGeometry(44, 28, 30), basketMat);
     basket.position.y = 20;
     group.add(basket);
 
-    // Wire mesh inside (suggested with white wireframe overlay)
-    const wire = new THREE.Mesh(
-      new THREE.BoxGeometry(41, 31, 29),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.4 })
-    );
+    // Wire overlay
+    const wire = new THREE.Mesh(new THREE.BoxGeometry(45, 29, 31),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.35 }));
     wire.position.y = 20;
     group.add(wire);
 
-    // Handle (back, going up)
-    const handle = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.5, 1.5, 22),
-      new THREE.MeshLambertMaterial({ color: 0x1f2937 })
-    );
-    handle.position.set(-20, 30, 0);
+    // Handle
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 22),
+      new THREE.MeshLambertMaterial({ color: 0x1f2937 }));
+    handle.position.set(-22, 28, 0);
     handle.rotation.z = -0.35;
     group.add(handle);
-    const handleBar = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.8, 1.8, 24),
-      new THREE.MeshLambertMaterial({ color: 0x1f2937 })
-    );
-    handleBar.position.set(-28, 40, 0);
+    const handleBar = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, 28),
+      new THREE.MeshLambertMaterial({ color: 0x1f2937 }));
+    handleBar.position.set(-30, 38, 0);
     handleBar.rotation.x = Math.PI / 2;
     group.add(handleBar);
 
-    // Wheels (4)
-    const wheelGeom = new THREE.CylinderGeometry(6, 6, 4, 12);
+    // Wheels
+    const wheelGeom = new THREE.CylinderGeometry(7, 7, 5, 12);
     const wheelMat = new THREE.MeshLambertMaterial({ color: 0x111827 });
-    for (const [x, z] of [[14, 12], [14, -12], [-14, 12], [-14, -12]]) {
+    for (const [wx, wz] of [[16, 13], [16, -13], [-16, 13], [-16, -13]]) {
       const w = new THREE.Mesh(wheelGeom, wheelMat);
       w.rotation.x = Math.PI / 2;
-      w.position.set(x, 6, z);
+      w.position.set(wx, 7, wz);
       group.add(w);
     }
 
-    // Avatar sprite (canvas texture)
+    // Exhaust pipes (two small cylinders at the back)
+    for (const ez of [-8, 8]) {
+      const ex = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 8, 6),
+        new THREE.MeshLambertMaterial({ color: 0x555566 }));
+      ex.rotation.z = Math.PI / 2;
+      ex.position.set(-24, 12, ez);
+      group.add(ex);
+    }
+
+    // Avatar sprite
     const avCanvas = document.createElement('canvas');
     avCanvas.width = 64; avCanvas.height = 64;
     const ctx = avCanvas.getContext('2d')!;
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(0, 0, 64, 64);
-    ctx.font = '48px serif';
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.beginPath();
+    ctx.arc(32, 32, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = '38px serif';
     ctx.textAlign = 'center';
-    ctx.fillText('🎮', 32, 50);
+    ctx.fillText('🎮', 32, 46);
     const tex = new THREE.CanvasTexture(avCanvas);
     const avMat = new THREE.SpriteMaterial({ map: tex });
     const avSprite = new THREE.Sprite(avMat);
-    avSprite.scale.set(20, 20, 1);
-    avSprite.position.y = 50;
+    avSprite.scale.set(22, 22, 1);
+    avSprite.position.y = 55;
     avSprite.name = 'avatar';
     group.add(avSprite);
 
@@ -366,25 +565,25 @@ export default function ShoppingCart() {
     const sprite = group.getObjectByName('avatar') as THREE.Sprite | undefined;
     if (!sprite) return;
     const tex = (sprite.material as THREE.SpriteMaterial).map as THREE.CanvasTexture;
-    if (!tex || !tex.image) return;
+    if (!tex?.image) return;
     const canvas = tex.image as HTMLCanvasElement;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Avatar emoji
-    ctx.font = '40px serif';
+    ctx.clearRect(0, 0, 64, 64);
+    ctx.fillStyle = isMe ? 'rgba(124,58,237,0.9)' : 'rgba(0,0,0,0.75)';
+    ctx.beginPath();
+    ctx.arc(32, 32, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = '34px serif';
     ctx.textAlign = 'center';
-    ctx.fillText(avatar, 32, 36);
-    // Name pill
-    ctx.fillStyle = isMe ? 'rgba(124,58,237,0.85)' : 'rgba(0,0,0,0.7)';
-    ctx.fillRect(0, 44, 64, 18);
+    ctx.fillText(avatar, 32, 42);
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 11px sans-serif';
+    ctx.font = 'bold 10px sans-serif';
     ctx.fillText((isMe ? 'YOU' : username).slice(0, 8), 32, 58);
     tex.needsUpdate = true;
   }, []);
 
-  // ── Server sync ────────────────────────────────────────────────────────────
+  // ── Server sync ───────────────────────────────────────────────────────────
 
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -392,12 +591,20 @@ export default function ShoppingCart() {
     const myId = getSocket().id;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const onState = (data: { t: number; carts: any[] }) => {
+    const onState = (data: { t: number; carts: any[]; forks?: any[] }) => {
       const map = new Map<string, RemoteCart>();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const c of data.carts as any[]) {
         map.set(c.id, c as RemoteCart);
         if (c.id === myId) ownServerRef.current = c;
+      }
+      // Update forklift positions from server
+      if (data.forks) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const fData of data.forks as any[]) {
+          const fMesh = forkMeshesRef.current.get(fData.id);
+          if (fMesh) fMesh.position.z = fData.z;
+        }
       }
       snapshotsRef.current.push({ t: data.t, clientT: Date.now(), carts: map });
       if (snapshotsRef.current.length > 5) snapshotsRef.current.shift();
@@ -407,15 +614,23 @@ export default function ShoppingCart() {
       if (data.id === myId) finishMsgRef.current = `🏁 You finished #${data.rank}! +${data.points}`;
     };
 
+    const onCollision = () => {
+      camShakeRef.current = Math.max(camShakeRef.current, 8);
+    };
+
     socket.on('cart:state', onState);
     socket.on('cart:finished', onFinish);
+    socket.on('cart:collision', onCollision);
+    socket.on('cart:hit', onCollision);
     return () => {
       socket.off('cart:state', onState);
       socket.off('cart:finished', onFinish);
+      socket.off('cart:collision', onCollision);
+      socket.off('cart:hit', onCollision);
     };
   }, []);
 
-  // ── Input ──────────────────────────────────────────────────────────────────
+  // ── Input ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const sendNow = () => {
@@ -429,6 +644,7 @@ export default function ShoppingCart() {
       if ((k === 's' || k === 'arrowdown') && !inputRef.current.brake) { inputRef.current.brake = true; changed = true; }
       if ((k === 'a' || k === 'arrowleft') && !inputRef.current.left) { inputRef.current.left = true; changed = true; }
       if ((k === 'd' || k === 'arrowright') && !inputRef.current.right) { inputRef.current.right = true; changed = true; }
+      if ((k === 'shift' || k === 'x') && !inputRef.current.drift) { inputRef.current.drift = true; changed = true; }
       if (k === ' ') { e.preventDefault(); sendInput('cart_jump', {}); }
       if (changed) sendNow();
     };
@@ -439,6 +655,7 @@ export default function ShoppingCart() {
       if ((k === 's' || k === 'arrowdown') && inputRef.current.brake) { inputRef.current.brake = false; changed = true; }
       if ((k === 'a' || k === 'arrowleft') && inputRef.current.left) { inputRef.current.left = false; changed = true; }
       if ((k === 'd' || k === 'arrowright') && inputRef.current.right) { inputRef.current.right = false; changed = true; }
+      if ((k === 'shift' || k === 'x') && inputRef.current.drift) { inputRef.current.drift = false; changed = true; }
       if (changed) sendNow();
     };
     window.addEventListener('keydown', down);
@@ -451,7 +668,7 @@ export default function ShoppingCart() {
     };
   }, [sendInput]);
 
-  // ── Get interpolated remote cart ──────────────────────────────────────────
+  // ── Interpolation ─────────────────────────────────────────────────────────
 
   const getInterp = useCallback((id: string): RemoteCart | null => {
     const snaps = snapshotsRef.current;
@@ -478,7 +695,7 @@ export default function ShoppingCart() {
     };
   }, []);
 
-  // ── Per-frame draw ─────────────────────────────────────────────────────────
+  // ── Per-frame draw ────────────────────────────────────────────────────────
 
   const drawFrame = useCallback(() => {
     const state = sceneStateRef.current;
@@ -488,110 +705,170 @@ export default function ShoppingCart() {
     const myId = getSocket().id;
     const now = performance.now();
 
-    // Animate pickups (bob + rotate)
-    for (const m of pickupMeshes.values()) {
-      m.rotation.y = now / 500;
-      m.position.y = m.userData.baseY ?? m.position.y;
-      if (m.userData.baseY === undefined) m.userData.baseY = m.position.y;
-      m.position.y = m.userData.baseY + Math.sin(now / 250) * 3;
-    }
-
-    // Update cart positions from interp/own
-    const lastSnap = snapshotsRef.current[snapshotsRef.current.length - 1];
-    const seen = new Set<string>();
-    if (lastSnap) for (const id of lastSnap.carts.keys()) seen.add(id);
-
-    // Remove meshes for players who left
-    for (const [id, group] of cartMeshes) {
-      if (!seen.has(id)) {
-        scene.remove(group);
-        cartMeshes.delete(id);
-      }
-    }
-
-    for (const id of seen) {
-      const cart = id === myId ? lastSnap!.carts.get(id)! : getInterp(id)!;
-      if (!cart) continue;
-      const pl = room?.players.find(pp => pp.socketId === id);
-      const colorHex = pl ? new THREE.Color(pl.color).getHex() : 0x7c3aed;
-      const group = ensureCartMesh(id, colorHex);
-      // Apply terrain height.
-      // Physics y=0 means on terrain, y<0 means ABOVE terrain (jump impulse is negative).
-      // Visual position: terrain_y MINUS cart.y so negative cart.y lifts the cart up.
-      const ty = terrainHeight(cart.x);
-      group.position.set(cart.x, ty - cart.y + 2, cart.z);
-      // Tilt nose down on downhill terrain (slope is negative going downhill,
-      // rotation.z negative tilts +X axis downward in Three.js right-hand coords).
-      const dx = 30;
-      const slope = (terrainHeight(cart.x + dx) - terrainHeight(cart.x - dx)) / (dx * 2);
-      group.rotation.z = slope;
-      group.rotation.x = 0;
-      // Body color tint when boosting
-      const basket = group.children[0] as THREE.Mesh;
-      const basketMat = basket.material as THREE.MeshLambertMaterial;
-      if (cart.bs) {
-        basketMat.emissive.setHex(0xfb923c);
-        basketMat.emissiveIntensity = 0.4;
-      } else if (cart.sp) {
-        basketMat.emissive.setHex(0xfde047);
-        basketMat.emissiveIntensity = 0.6;
-      } else {
-        basketMat.emissive.setHex(0x000000);
-        basketMat.emissiveIntensity = 0;
-      }
-      // Update avatar label
-      if (pl) updateAvatarSprite(group, pl.avatar, pl.username, id === myId);
-    }
-
-    // Camera follows local player
-    // Delta-time for frame-rate-independent smoothing
     const dt = lastFrameTimeRef.current > 0
       ? Math.min((now - lastFrameTimeRef.current) / 1000, 0.05)
       : 1 / 60;
     lastFrameTimeRef.current = now;
 
-    const own = ownServerRef.current;
-    if (own) {
-      // Predict cart X position forward between 20Hz server ticks using velocity.
-      // This eliminates the discrete "jump" every 50ms and makes the camera silky smooth.
+    // Animate pickups
+    for (const m of pickupMeshes.values()) {
+      if (!m.userData.baseY) m.userData.baseY = m.position.y;
+      m.rotation.y = now / 400;
+      m.rotation.x = now / 600;
+      m.position.y = m.userData.baseY + Math.sin(now / 220) * 4;
+    }
+
+    // Update forklift light flicker
+    for (const g of forkMeshesRef.current.values()) {
+      g.traverse(obj => {
+        if (obj instanceof THREE.PointLight) {
+          obj.intensity = 1.2 + Math.sin(now / 300) * 0.5;
+        }
+      });
+    }
+
+    // Get latest snapshot
+    const lastSnap = snapshotsRef.current[snapshotsRef.current.length - 1];
+    const seen = new Set<string>();
+    if (lastSnap) for (const id of lastSnap.carts.keys()) seen.add(id);
+
+    for (const [id, group] of cartMeshes) {
+      if (!seen.has(id)) { scene.remove(group); cartMeshes.delete(id); }
+    }
+
+    let myCartData: RemoteCart | null = null;
+
+    for (const id of seen) {
+      const cart = id === myId ? lastSnap!.carts.get(id)! : getInterp(id)!;
+      if (!cart) continue;
+      if (id === myId) myCartData = cart;
+
+      const pl = room?.players.find(pp => pp.socketId === id);
+      const colorHex = pl ? new THREE.Color(pl.color).getHex() : 0x7c3aed;
+      const group = ensureCartMesh(id, colorHex);
+
+      const ty = terrainHeight(cart.x);
+      const cartVisY = ty - cart.y + 2;
+
+      // Slope tilt
+      const dx2 = 30;
+      const slope = (terrainHeight(cart.x + dx2) - terrainHeight(cart.x - dx2)) / (dx2 * 2);
+
+      // Drift lean: lean into the turn
+      const driftLean = cart.dr ? (cart.vz / 300) * 0.35 : 0;
+
+      group.position.set(cart.x, cartVisY, cart.z);
+      group.rotation.z = slope + driftLean;
+      group.rotation.y = -cart.yaw;
+
+      // Emissive tint
+      const basket = group.children[0] as THREE.Mesh;
+      const bMat = basket.material as THREE.MeshLambertMaterial;
+      if (cart.db) {
+        bMat.emissive.setHex(0xaa00ff);
+        bMat.emissiveIntensity = 0.6 + Math.sin(now / 80) * 0.3;
+      } else if (cart.bs) {
+        bMat.emissive.setHex(0xff5500);
+        bMat.emissiveIntensity = 0.5;
+      } else if (cart.sp) {
+        bMat.emissive.setHex(0xffee00);
+        bMat.emissiveIntensity = 0.7;
+      } else if (cart.dr) {
+        bMat.emissive.setHex(0x0055ff);
+        bMat.emissiveIntensity = 0.3;
+      } else {
+        bMat.emissive.setHex(0x000000);
+        bMat.emissiveIntensity = 0;
+      }
+
+      if (pl) updateAvatarSprite(group, pl.avatar, pl.username, id === myId);
+
+      // Spawn particles for my cart
+      if (id === myId) {
+        if (cart.dr) {
+          const driftSide = cart.vz > 0 ? -1 : 1;
+          spawnDriftSmoke(particlesRef.current, cart.x, cartVisY, cart.z, driftSide);
+          if (cart.dc > 40) spawnDriftSparks(particlesRef.current, cart.x, cartVisY, cart.z);
+        }
+        if (cart.bs || cart.db) {
+          spawnBoostFlame(particlesRef.current, cart.x, cartVisY, cart.z);
+        }
+      }
+    }
+
+    // Update and render particles as billboarded sprites
+    updateParticles(particlesRef.current, dt);
+
+    // ── 3rd-person camera ──
+    if (myCartData) {
       const snap = snapshotsRef.current[snapshotsRef.current.length - 1];
       const msSinceSnap = snap ? Math.min(Date.now() - snap.clientT, 80) : 0;
-      const predX = own.x + (own.vx * msSinceSnap) / 1000;
-
-      // Actual cart visual height (ty - own.y lifts cart upward when own.y is negative = airborne)
+      const predX = myCartData.x + (myCartData.vx * msSinceSnap) / 1000;
       const ty = terrainHeight(predX);
-      const cartVisY = ty - own.y;
+      const cartVisY = ty - myCartData.y + 2;
 
-      // Camera sits 160 units behind and 100 units above the cart, partially follows lateral
-      const targetCamX = predX - 160;
-      const targetCamY = cartVisY + 100;
-      const targetCamZ = own.z * 0.5;
+      // Smooth cart yaw from server yaw
+      const serverYaw = myCartData.yaw;
+      const yawDiff = serverYaw - cartYawRef.current;
+      const yawDiffWrapped = ((yawDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
+      cartYawRef.current += yawDiffWrapped * Math.min(1, dt * 8);
 
-      // kXZ fast (~11%/frame @60fps), kY slower (~5%/frame) so vertical is still stable
-      const kXZ = 1 - Math.exp(-7 * dt);
-      const kY  = 1 - Math.exp(-3 * dt);
+      const cYaw = cartYawRef.current;
 
-      camera.position.x += (targetCamX - camera.position.x) * kXZ;
-      camera.position.y += (targetCamY - camera.position.y) * kY;
-      camera.position.z += (targetCamZ - camera.position.z) * kXZ;
+      // Speed-based FOV
+      const speedRatio = Math.min(1, myCartData.vx / 620);
+      const targetFOV = 65 + speedRatio * 25 + (myCartData.db ? 15 : 0);
+      camera.fov += (targetFOV - camera.fov) * Math.min(1, dt * 4);
+      camera.updateProjectionMatrix();
 
-      // lookAt target: 160 units ahead of cart at cart's actual height
-      const sm = smoothLookRef.current;
-      sm.x += (predX + 160 - sm.x) * kXZ;
-      sm.y += (cartVisY + 20 - sm.y) * kY;
-      sm.z += (own.z * 0.7 - sm.z) * kXZ;
-      camera.lookAt(sm.x, sm.y, sm.z);
+      // Camera arm: 180 behind, 90 up, offset in direction OPPOSITE cart heading
+      const armDist = 180 + speedRatio * 40;
+      const armH = 85 + speedRatio * 20;
+
+      const targetCamX = predX - Math.cos(cYaw) * armDist;
+      const targetCamZ = myCartData.z - Math.sin(cYaw) * armDist;
+      const targetCamY = cartVisY + armH;
+
+      // Drift tilt: camera rolls slightly during drift
+      const driftTilt = myCartData.dr ? (myCartData.vz / 300) * 0.12 : 0;
+
+      // Spring damping
+      const kPos = 1 - Math.exp(-7 * dt);
+      const kY = 1 - Math.exp(-4 * dt);
+
+      const cp = camPosRef.current;
+      cp.x += (targetCamX - cp.x) * kPos;
+      cp.y += (targetCamY - cp.y) * kY;
+      cp.z += (targetCamZ - cp.z) * kPos;
+
+      // Camera shake
+      const shakeAmt = camShakeRef.current;
+      camShakeRef.current = Math.max(0, shakeAmt - dt * 25);
+      const shakeX = (Math.random() - 0.5) * shakeAmt;
+      const shakeY = (Math.random() - 0.5) * shakeAmt * 0.5;
+
+      camera.position.set(cp.x + shakeX, cp.y + shakeY, cp.z);
+      camera.rotation.z = driftTilt;
+
+      // LookAt: slightly ahead of cart
+      const lookTargetX = predX + Math.cos(cYaw) * 120;
+      const lookTargetZ = myCartData.z + Math.sin(cYaw) * 120;
+      const lookTargetY = cartVisY + 18;
+
+      const cl = camLookRef.current;
+      cl.x += (lookTargetX - cl.x) * kPos;
+      cl.y += (lookTargetY - cl.y) * kY;
+      cl.z += (lookTargetZ - cl.z) * kPos;
+
+      camera.lookAt(cl.x, cl.y, cl.z);
+      // Re-apply drift roll after lookAt
+      camera.rotation.z += driftTilt;
     }
 
     renderer.render(scene, camera);
   }, [ensureCartMesh, getInterp, updateAvatarSprite]);
 
-  // Plug drawFrame into the animation loop (the loop just calls drawFrame())
-  // We achieve this by having the setup useEffect call drawFrame() from
-  // sceneStateRef directly — but drawFrame is a stable callback, so this works.
-  // (The setup effect calls a local animate() which calls drawFrame via closure.)
-
-  // ── HUD overlay (2D canvas on top) ─────────────────────────────────────────
+  // ── HUD ───────────────────────────────────────────────────────────────────
 
   const hudRef = useRef<HTMLCanvasElement>(null);
 
@@ -606,34 +883,78 @@ export default function ShoppingCart() {
 
       const own = ownServerRef.current;
       if (own) {
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.fillRect(10, 10, 200, 56);
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 14px sans-serif';
-        ctx.fillText(`${Math.round(own.vx)} km/h`, 18, 32);
-        ctx.font = 'bold 12px sans-serif';
-        ctx.fillText(own.bs ? '🚀 TURBO!' : own.sp ? '🍌 SPIN OUT!' : 'W gas • A/D steer • SPACE jump', 18, 52);
+        // Speed display
+        ctx.fillStyle = 'rgba(0,0,10,0.75)';
+        roundRect(ctx, 10, 10, 200, 62, 10);
+        ctx.fill();
+        const speedColor = own.db ? '#cc44ff' : own.bs ? '#ff6600' : '#00ffcc';
+        ctx.fillStyle = speedColor;
+        ctx.font = 'bold 28px monospace';
+        ctx.fillText(`${Math.round(own.vx)}`, 22, 48);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '11px sans-serif';
+        ctx.fillText('km/h', 95, 48);
 
-        // Progress bar
+        // Status badge
+        const badge = own.db ? '💜 DRIFT BOOST!' : own.bs ? '🚀 TURBO!' : own.sp ? '🍌 SPIN OUT!' : own.dr ? '🔵 DRIFTING' : '';
+        if (badge) {
+          ctx.fillStyle = own.db ? 'rgba(120,0,200,0.85)' : own.bs ? 'rgba(200,80,0,0.85)' : own.sp ? 'rgba(180,160,0,0.85)' : 'rgba(0,80,200,0.85)';
+          roundRect(ctx, 10, 78, 200, 28, 6);
+          ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 13px sans-serif';
+          ctx.fillText(badge, 22, 97);
+        }
+
+        // Drift charge meter
+        if (own.dr || own.dc > 0) {
+          const charge = own.dc / 100;
+          ctx.fillStyle = 'rgba(0,0,20,0.8)';
+          roundRect(ctx, 10, 112, 200, 16, 4);
+          ctx.fill();
+          const chargeColor = charge > 0.6 ? '#ff00ff' : charge > 0.3 ? '#8844ff' : '#4466ff';
+          ctx.fillStyle = chargeColor;
+          roundRect(ctx, 12, 114, 196 * charge, 12, 3);
+          ctx.fill();
+          ctx.fillStyle = '#aaa';
+          ctx.font = '9px monospace';
+          ctx.fillText('DRIFT CHARGE', 12, 123);
+        }
+
+        // Progress bar (bottom center)
         const progress = Math.min(1, own.x / FINISH_X);
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.fillRect(CANVAS_W / 2 - 160, CANVAS_H - 30, 320, 16);
-        ctx.fillStyle = own.bs ? '#fb923c' : '#10b981';
-        ctx.fillRect(CANVAS_W / 2 - 158, CANVAS_H - 28, 316 * progress, 12);
+        ctx.fillStyle = 'rgba(0,0,10,0.7)';
+        roundRect(ctx, CANVAS_W / 2 - 175, CANVAS_H - 32, 350, 20, 5);
+        ctx.fill();
+        const gradProg = ctx.createLinearGradient(CANVAS_W / 2 - 173, 0, CANVAS_W / 2 + 173, 0);
+        gradProg.addColorStop(0, '#7c3aed');
+        gradProg.addColorStop(0.5, '#00ffcc');
+        gradProg.addColorStop(1, '#ff6600');
+        ctx.fillStyle = gradProg;
+        roundRect(ctx, CANVAS_W / 2 - 173, CANVAS_H - 30, 346 * progress, 16, 4);
+        ctx.fill();
         ctx.fillStyle = '#fff';
-        ctx.font = '14px serif';
+        ctx.font = '13px serif';
         ctx.textAlign = 'center';
-        ctx.fillText('🏁', CANVAS_W / 2 + 154, CANVAS_H - 17);
+        ctx.fillText('🏁', CANVAS_W / 2 + 170, CANVAS_H - 17);
+        ctx.textAlign = 'left';
+
+        // Controls hint (top right)
+        ctx.fillStyle = 'rgba(255,255,255,0.25)';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText('W gas  S brake  A/D steer  SHIFT drift  SPACE jump', CANVAS_W - 10, CANVAS_H - 12);
         ctx.textAlign = 'left';
       }
 
       if (finishMsgRef.current) {
-        ctx.fillStyle = 'rgba(0,0,0,0.75)';
-        ctx.fillRect(CANVAS_W / 2 - 200, CANVAS_H / 2 - 30, 400, 60);
+        ctx.fillStyle = 'rgba(0,0,20,0.88)';
+        roundRect(ctx, CANVAS_W / 2 - 210, CANVAS_H / 2 - 36, 420, 72, 14);
+        ctx.fill();
         ctx.fillStyle = '#fbbf24';
-        ctx.font = 'bold 24px sans-serif';
+        ctx.font = 'bold 26px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(finishMsgRef.current, CANVAS_W / 2, CANVAS_H / 2 + 8);
+        ctx.fillText(finishMsgRef.current, CANVAS_W / 2, CANVAS_H / 2 + 10);
         ctx.textAlign = 'left';
       }
 
@@ -645,8 +966,8 @@ export default function ShoppingCart() {
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <div className="text-white/60 text-xs text-center mb-1 px-2">
-        W = gas • S = brake • A/D = steer • SPACE = jump • Dodge trees, hit ramps & 🚀 turbo crates!
+      <div className="text-white/50 text-xs text-center mb-1 px-2">
+        W gas · S brake · A/D steer · <span className="text-purple-400 font-bold">SHIFT = DRIFT</span> (hold + steer for drift boost!) · SPACE jump
       </div>
       <div className="relative" style={{ width: CANVAS_W, maxWidth: '100%' }}>
         <div ref={mountRef} />
@@ -660,32 +981,50 @@ export default function ShoppingCart() {
       </div>
 
       {/* Mobile controls */}
-      <div className="flex gap-3 mt-2 lg:hidden flex-wrap justify-center">
-        <button
-          className="w-14 h-14 rounded-xl bg-white/10 border border-white/20 text-white text-xl"
+      <div className="flex gap-2 mt-2 lg:hidden flex-wrap justify-center">
+        <button className="w-14 h-14 rounded-xl bg-white/10 border border-white/20 text-white text-xl touch-target"
           onPointerDown={() => { inputRef.current.left = true; sendInput('cart_input', inputRef.current); }}
           onPointerUp={() => { inputRef.current.left = false; sendInput('cart_input', inputRef.current); }}
+          onPointerLeave={() => { inputRef.current.left = false; sendInput('cart_input', inputRef.current); }}
         >◀</button>
-        <button
-          className="w-14 h-14 rounded-xl bg-green-500/40 border border-green-500/60 text-white font-bold"
+        <button className="w-14 h-14 rounded-xl bg-green-500/40 border border-green-500/60 text-white font-bold touch-target"
           onPointerDown={() => { inputRef.current.accel = true; sendInput('cart_input', inputRef.current); }}
           onPointerUp={() => { inputRef.current.accel = false; sendInput('cart_input', inputRef.current); }}
+          onPointerLeave={() => { inputRef.current.accel = false; sendInput('cart_input', inputRef.current); }}
         >GAS</button>
-        <button
-          className="w-16 h-14 rounded-xl bg-brand-purple/40 border border-brand-purple/60 text-white font-bold"
+        <button className="w-16 h-14 rounded-xl bg-purple-600/60 border border-purple-400/60 text-white font-bold touch-target text-xs"
+          onPointerDown={() => { inputRef.current.drift = true; sendInput('cart_input', inputRef.current); }}
+          onPointerUp={() => { inputRef.current.drift = false; sendInput('cart_input', inputRef.current); }}
+          onPointerLeave={() => { inputRef.current.drift = false; sendInput('cart_input', inputRef.current); }}
+        >DRIFT</button>
+        <button className="w-14 h-14 rounded-xl bg-brand-purple/40 border border-brand-purple/60 text-white font-bold touch-target"
           onPointerDown={() => sendInput('cart_jump', {})}
         >JUMP</button>
-        <button
-          className="w-14 h-14 rounded-xl bg-red-500/40 border border-red-500/60 text-white"
+        <button className="w-14 h-14 rounded-xl bg-red-500/40 border border-red-500/60 text-white touch-target"
           onPointerDown={() => { inputRef.current.brake = true; sendInput('cart_input', inputRef.current); }}
           onPointerUp={() => { inputRef.current.brake = false; sendInput('cart_input', inputRef.current); }}
+          onPointerLeave={() => { inputRef.current.brake = false; sendInput('cart_input', inputRef.current); }}
         >BRAKE</button>
-        <button
-          className="w-14 h-14 rounded-xl bg-white/10 border border-white/20 text-white text-xl"
+        <button className="w-14 h-14 rounded-xl bg-white/10 border border-white/20 text-white text-xl touch-target"
           onPointerDown={() => { inputRef.current.right = true; sendInput('cart_input', inputRef.current); }}
           onPointerUp={() => { inputRef.current.right = false; sendInput('cart_input', inputRef.current); }}
+          onPointerLeave={() => { inputRef.current.right = false; sendInput('cart_input', inputRef.current); }}
         >▶</button>
       </div>
     </div>
   );
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
 }

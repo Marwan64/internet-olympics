@@ -5,47 +5,48 @@
  *   x  = forward distance down the mountain  (0 → FINISH_X)
  *   y  = vertical (height above slope)       (0 = on terrain)
  *   z  = lateral position                    (-LANE_HALF → +LANE_HALF)
- *
- * Forward motion is gravity-driven (downhill). Players steer left/right with
- * A/D, accelerate with W (extra gas), brake with S, and can jump (Space) when
- * grounded — useful for clearing obstacles. Ramps give a free jump.
- *
- * Server runs physics at 30Hz, broadcasts at 15Hz, sends action events
- * (turbo, hit, finish) immediately.
  */
 import { GameResults, PlayerResult } from '../types';
 import { BaseGame } from './BaseGame';
 
 export const TRACK_LENGTH = 7000;
 export const FINISH_X = 6800;
-export const LANE_HALF = 220;     // track is 440 wide
-const CART_R = 22;                // collision radius
+export const LANE_HALF = 220;
+const CART_R = 22;
 const PHYSICS_HZ = 30;
 const BROADCAST_HZ = 20;
 
 // Forward physics
-const GRAVITY_FORWARD = 90;       // constant downhill acceleration
-const GAS_ACCEL = 180;            // extra accel from W
-const BRAKE_DECEL = 280;          // S braking
-const FORWARD_MAX = 540;          // top speed
-const FORWARD_DRAG = 0.18;        // air drag
+const GRAVITY_FORWARD = 100;
+const GAS_ACCEL = 200;
+const BRAKE_DECEL = 320;
+const FORWARD_MAX = 620;
+const FORWARD_DRAG = 0.16;
 
 // Lateral steering
-const STEER_ACCEL = 600;
-const LATERAL_FRICTION = 4.5;
-const LATERAL_MAX = 280;
+const STEER_ACCEL = 700;
+const LATERAL_FRICTION = 5.0;
+const LATERAL_MAX = 300;
+
+// Drift
+const DRIFT_LATERAL_FRICTION = 1.2;   // much less grip while drifting
+const DRIFT_STEER_MULT = 1.6;          // wider turning radius
+const DRIFT_SPEED_PENALTY = 0.88;      // slight speed reduction while drifting
+const DRIFT_CHARGE_RATE = 1.0;         // charge per second
+const DRIFT_BOOST_THRESHOLD = 0.4;     // minimum charge to earn boost
+const DRIFT_BOOST_DURATION = 2200;     // ms
+const DRIFT_BOOST_MULT = 1.55;
 
 // Vertical
 const GRAVITY_DOWN = 1900;
-const JUMP_IMPULSE = -650;
-const RAMP_LAUNCH = -780;         // when crossing a ramp at speed
+const JUMP_IMPULSE = -700;
+const RAMP_LAUNCH = -850;
 
 // Items
 const BOOST_DURATION = 3000;
 const BOOST_MULT = 1.7;
 const SPIN_DURATION = 1200;
 
-// Course features
 export const RAMPS = [
   { x: 1400, halfWidth: 80 },
   { x: 2800, halfWidth: 80 },
@@ -53,22 +54,30 @@ export const RAMPS = [
   { x: 5600, halfWidth: 80 },
 ];
 
-export const OBSTACLES: Array<{ id: string; x: number; z: number; type: 'tree' | 'rock' }> = [
+export const OBSTACLES: Array<{ id: string; x: number; z: number; type: 'tree' | 'rock' | 'shelf' | 'forklift' }> = [
   { id: 'o0', x: 600, z: -120, type: 'tree' },
   { id: 'o1', x: 850, z: 80,   type: 'rock' },
   { id: 'o2', x: 1100, z: -40, type: 'tree' },
-  { id: 'o3', x: 1800, z: 100, type: 'tree' },
+  { id: 'o3', x: 1800, z: 100, type: 'shelf' },
   { id: 'o4', x: 2100, z: -160, type: 'rock' },
   { id: 'o5', x: 2400, z: 50,  type: 'tree' },
-  { id: 'o6', x: 3100, z: -100, type: 'rock' },
+  { id: 'o6', x: 3100, z: -100, type: 'shelf' },
   { id: 'o7', x: 3400, z: 130, type: 'tree' },
-  { id: 'o8', x: 3700, z: 0,   type: 'tree' },
+  { id: 'o8', x: 3700, z: 0,   type: 'shelf' },
   { id: 'o9', x: 4500, z: -150, type: 'rock' },
   { id: 'o10', x: 4800, z: 90, type: 'tree' },
-  { id: 'o11', x: 5100, z: -60, type: 'tree' },
+  { id: 'o11', x: 5100, z: -60, type: 'shelf' },
   { id: 'o12', x: 5300, z: 160, type: 'rock' },
   { id: 'o13', x: 5900, z: -80, type: 'tree' },
   { id: 'o14', x: 6200, z: 50,  type: 'rock' },
+];
+
+// Moving forklifts — patrol laterally
+export const FORKLIFTS = [
+  { id: 'f0', x: 1600, zMin: -160, zMax: 160, speed: 90 },
+  { id: 'f1', x: 3200, zMin: -140, zMax: 140, speed: 120 },
+  { id: 'f2', x: 4900, zMin: -180, zMax: 80, speed: 150 },
+  { id: 'f3', x: 6000, zMin: -100, zMax: 180, speed: 100 },
 ];
 
 export const PICKUPS: Array<{ id: string; x: number; z: number; type: 'turbo' }> = [
@@ -83,18 +92,12 @@ export const PICKUPS: Array<{ id: string; x: number; z: number; type: 'turbo' }>
   { id: 'p8', x: 6400, z: 0, type: 'turbo' },
 ];
 
-// Terrain height: gentle downhill + bumps. Smaller bumps = more controllable.
-// Note: the cart's "y" coordinate is relative ground level (0 = on terrain).
-// Visual elevation comes from this function purely for the renderer.
 export function terrainHeight(x: number): number {
   if (x < 0) return 0;
   if (x > TRACK_LENGTH) return -TRACK_LENGTH * 0.15;
-  // Overall downhill drop (each x unit = -0.12 height)
   let h = -x * 0.12;
-  // Rolling bumps
   h += Math.sin(x / 110) * 14;
   h += Math.cos(x / 270) * 22;
-  // Pronounced ramps
   for (const r of RAMPS) {
     if (Math.abs(x - r.x) < r.halfWidth) {
       const t = 1 - Math.abs(x - r.x) / r.halfWidth;
@@ -104,15 +107,17 @@ export function terrainHeight(x: number): number {
   return h;
 }
 
-// ── State ─────────────────────────────────────────────────────────────────────
-
 interface CartState {
   socketId: string;
   x: number; y: number; z: number;
   vx: number; vy: number; vz: number;
+  yaw: number;             // cart facing angle in XZ plane
   onGround: boolean;
   boostUntil: number;
   spinOutUntil: number;
+  drifting: boolean;
+  driftCharge: number;     // 0-1
+  driftBoostUntil: number;
   finished: boolean;
   finishRank: number;
   input: {
@@ -121,15 +126,16 @@ interface CartState {
     left: boolean;
     right: boolean;
     jump: boolean;
+    drift: boolean;
   };
   jumpRequestedAt: number;
   lastRampX: number;
   pickupsTaken: Set<string>;
+  collisionCooldown: number;
 }
 
+interface ForkState { id: string; x: number; z: number; dir: 1 | -1; speed: number; zMin: number; zMax: number }
 interface PickupState { id: string; x: number; z: number; type: 'turbo'; active: boolean; respawnAt: number }
-
-// ── Game ──────────────────────────────────────────────────────────────────────
 
 export class ShoppingCart extends BaseGame {
   readonly gameType = 'shopping-cart-racing' as const;
@@ -137,6 +143,7 @@ export class ShoppingCart extends BaseGame {
 
   private carts = new Map<string, CartState>();
   private pickups: PickupState[] = [];
+  private forks: ForkState[] = [];
   private finishCount = 0;
   private physicsInterval: NodeJS.Timeout | null = null;
   private broadcastInterval: NodeJS.Timeout | null = null;
@@ -147,25 +154,33 @@ export class ShoppingCart extends BaseGame {
   protected async onStart(): Promise<void> {
     const ids = [...this.config.playerIds];
     ids.forEach((id, idx) => {
-      // Spread starting carts across the lane
       const lateral = ((idx % 5) - 2) * 60;
       this.carts.set(id, {
         socketId: id,
         x: 30 + Math.floor(idx / 5) * 10,
         y: 0, z: lateral,
         vx: 0, vy: 0, vz: 0,
+        yaw: 0,
         onGround: true,
         boostUntil: 0,
         spinOutUntil: 0,
+        drifting: false,
+        driftCharge: 0,
+        driftBoostUntil: 0,
         finished: false,
         finishRank: 0,
-        input: { accel: false, brake: false, left: false, right: false, jump: false },
+        input: { accel: false, brake: false, left: false, right: false, jump: false, drift: false },
         jumpRequestedAt: 0,
         lastRampX: -1000,
         pickupsTaken: new Set(),
+        collisionCooldown: 0,
       });
     });
     this.pickups = PICKUPS.map(p => ({ ...p, active: true, respawnAt: 0 }));
+    this.forks = FORKLIFTS.map(f => ({
+      id: f.id, x: f.x, z: (f.zMin + f.zMax) / 2,
+      dir: 1 as 1 | -1, speed: f.speed, zMin: f.zMin, zMax: f.zMax,
+    }));
   }
 
   protected async onPlayStart(): Promise<void> {
@@ -192,6 +207,7 @@ export class ShoppingCart extends BaseGame {
         c.input.brake = !!input.payload.brake;
         c.input.left = !!input.payload.left;
         c.input.right = !!input.payload.right;
+        c.input.drift = !!input.payload.drift;
         break;
       case 'cart_jump':
         c.jumpRequestedAt = Date.now();
@@ -205,40 +221,76 @@ export class ShoppingCart extends BaseGame {
     const dt = Math.min((now - this.lastTick) / 1000, 0.1);
     this.lastTick = now;
 
+    // Move forklifts
+    for (const f of this.forks) {
+      f.z += f.dir * f.speed * dt;
+      if (f.z >= f.zMax) { f.z = f.zMax; f.dir = -1; }
+      if (f.z <= f.zMin) { f.z = f.zMin; f.dir = 1; }
+    }
+
     for (const c of this.carts.values()) {
       if (c.finished) continue;
       const spinning = now < c.spinOutUntil;
-      const boosted = now < c.boostUntil;
-      const mult = boosted ? BOOST_MULT : 1;
+      const boosted = now < c.boostUntil || now < c.driftBoostUntil;
+      const mult = boosted ? (now < c.boostUntil ? BOOST_MULT : DRIFT_BOOST_MULT) : 1;
+
+      // ── Drift state ──
+      const wasDrifting = c.drifting;
+      if (!spinning && c.onGround) {
+        const steering = c.input.left || c.input.right;
+        c.drifting = c.input.drift && steering;
+      } else {
+        c.drifting = false;
+      }
+
+      // Drift released — award boost
+      if (wasDrifting && !c.drifting && c.driftCharge >= DRIFT_BOOST_THRESHOLD) {
+        c.driftBoostUntil = now + Math.round(DRIFT_BOOST_DURATION * c.driftCharge);
+        this.pendingEvents.push({ type: 'cart:drift_boost', data: { id: c.socketId, charge: c.driftCharge } });
+        c.driftCharge = 0;
+      } else if (!c.drifting) {
+        c.driftCharge = 0;
+      }
+
+      if (c.drifting) {
+        c.driftCharge = Math.min(1, c.driftCharge + DRIFT_CHARGE_RATE * dt);
+      }
 
       // ── Forward ──
-      // Always-on downhill gravity
       c.vx += GRAVITY_FORWARD * mult * dt;
       if (!spinning) {
         if (c.input.accel) c.vx += GAS_ACCEL * mult * dt;
         if (c.input.brake) c.vx -= BRAKE_DECEL * dt;
+        if (c.drifting) c.vx *= Math.pow(DRIFT_SPEED_PENALTY, dt * 10);
       }
-      // Drag scales with speed²
       c.vx -= c.vx * FORWARD_DRAG * dt;
-      if (c.vx < 30) c.vx = 30; // never fully stop; this is a downhill race
+      if (c.vx < 30) c.vx = 30;
       const fmax = FORWARD_MAX * mult;
       if (c.vx > fmax) c.vx = fmax;
 
       // ── Lateral steering ──
+      const latFriction = c.drifting ? DRIFT_LATERAL_FRICTION : LATERAL_FRICTION;
+      const steerMult = c.drifting ? DRIFT_STEER_MULT : 1;
       if (!spinning) {
-        if (c.input.left) c.vz -= STEER_ACCEL * dt;
-        if (c.input.right) c.vz += STEER_ACCEL * dt;
+        if (c.input.left) c.vz -= STEER_ACCEL * steerMult * dt;
+        if (c.input.right) c.vz += STEER_ACCEL * steerMult * dt;
       }
-      c.vz -= c.vz * LATERAL_FRICTION * dt;
-      if (c.vz > LATERAL_MAX) c.vz = LATERAL_MAX;
-      if (c.vz < -LATERAL_MAX) c.vz = -LATERAL_MAX;
+      c.vz -= c.vz * latFriction * dt;
+      const lmax = c.drifting ? LATERAL_MAX * 1.5 : LATERAL_MAX;
+      if (c.vz > lmax) c.vz = lmax;
+      if (c.vz < -lmax) c.vz = -lmax;
+
+      // Smooth yaw from velocity
+      if (c.vx > 10) {
+        const targetYaw = Math.atan2(c.vz, c.vx);
+        c.yaw += (targetYaw - c.yaw) * Math.min(1, dt * 6);
+      }
 
       // ── Vertical ──
       if (!c.onGround) {
         c.vy += GRAVITY_DOWN * dt;
       }
 
-      // Jump (if requested within last 100ms and grounded)
       if (c.onGround && now - c.jumpRequestedAt < 100) {
         c.vy = JUMP_IMPULSE;
         c.onGround = false;
@@ -250,13 +302,11 @@ export class ShoppingCart extends BaseGame {
       c.y += c.vy * dt;
       c.z += c.vz * dt;
 
-      // Lateral wall bounce
-      if (c.z > LANE_HALF) { c.z = LANE_HALF; c.vz = -c.vz * 0.4; }
-      if (c.z < -LANE_HALF) { c.z = -LANE_HALF; c.vz = -c.vz * 0.4; }
+      if (c.z > LANE_HALF) { c.z = LANE_HALF; c.vz = -c.vz * 0.35; }
+      if (c.z < -LANE_HALF) { c.z = -LANE_HALF; c.vz = -c.vz * 0.35; }
 
-      // Ground collision: y=0 is "on terrain"
       if (c.y >= 0) {
-        if (!c.onGround && c.vy > 200) c.vx *= 0.85; // hard landing
+        if (!c.onGround && c.vy > 250) c.vx *= 0.82;
         c.y = 0;
         c.vy = 0;
         c.onGround = true;
@@ -264,9 +314,9 @@ export class ShoppingCart extends BaseGame {
         c.onGround = false;
       }
 
-      // Ramp launch: when crossing a ramp at speed, get auto-air
+      // Ramp launch
       for (const r of RAMPS) {
-        if (c.lastRampX !== r.x && Math.abs(c.x - r.x) < r.halfWidth * 0.3 && c.onGround && c.vx > 200) {
+        if (c.lastRampX !== r.x && Math.abs(c.x - r.x) < r.halfWidth * 0.3 && c.onGround && c.vx > 180) {
           c.vy = RAMP_LAUNCH;
           c.onGround = false;
           c.lastRampX = r.x;
@@ -274,20 +324,34 @@ export class ShoppingCart extends BaseGame {
         }
       }
 
-      // ── Obstacles ──
+      // ── Static obstacles ──
       if (!spinning) {
         for (const o of OBSTACLES) {
           const dx = c.x - o.x;
           const dz = c.z - o.z;
-          // Trees taller, rocks shorter; only collide if cart isn't above the obstacle
-          const obsHeight = o.type === 'tree' ? 90 : 30;
-          if (c.y < -obsHeight) continue; // jumped over it
-          if (dx * dx + dz * dz < (CART_R + 18) ** 2) {
+          const obsHeight = o.type === 'tree' ? 90 : (o.type === 'shelf' ? 80 : 30);
+          if (c.y < -obsHeight) continue;
+          const hitR = (o.type === 'shelf') ? 30 : 18;
+          if (dx * dx + dz * dz < (CART_R + hitR) ** 2) {
             c.spinOutUntil = now + SPIN_DURATION;
-            c.vx *= 0.45;
-            c.vz = -c.vz * 0.3;
+            c.vx *= 0.5;
+            c.vz = -c.vz * 0.4;
             this.pendingEvents.push({ type: 'cart:hit', data: { id: c.socketId, obstacleId: o.id } });
             break;
+          }
+        }
+      }
+
+      // ── Forklift collision ──
+      if (!spinning) {
+        for (const f of this.forks) {
+          const dx = c.x - f.x;
+          const dz = c.z - f.z;
+          if (dx * dx + dz * dz < (CART_R + 28) ** 2) {
+            c.spinOutUntil = now + SPIN_DURATION;
+            c.vx *= 0.4;
+            c.vz += f.dir * 80;
+            this.pendingEvents.push({ type: 'cart:hit', data: { id: c.socketId, obstacleId: f.id } });
           }
         }
       }
@@ -298,7 +362,6 @@ export class ShoppingCart extends BaseGame {
           if (now >= p.respawnAt) p.active = true;
           else continue;
         }
-        if (!p.active) continue;
         const dx = c.x - p.x;
         const dz = c.z - p.z;
         if (dx * dx + dz * dz < (CART_R + 20) ** 2) {
@@ -309,7 +372,7 @@ export class ShoppingCart extends BaseGame {
         }
       }
 
-      // ── Finish line ──
+      // ── Finish ──
       if (c.x >= FINISH_X) {
         c.finished = true;
         this.finishCount++;
@@ -317,10 +380,7 @@ export class ShoppingCart extends BaseGame {
         const rankPts = [1000, 700, 500, 350, 250, 200, 150];
         const pts = rankPts[c.finishRank - 1] ?? 100;
         this.addScore(c.socketId, pts);
-        this.pendingEvents.push({
-          type: 'cart:finished',
-          data: { id: c.socketId, rank: c.finishRank, points: pts },
-        });
+        this.pendingEvents.push({ type: 'cart:finished', data: { id: c.socketId, rank: c.finishRank, points: pts } });
         if (!this.endingEarly && this.finishCount >= this.carts.size) {
           this.endingEarly = true;
           setTimeout(() => this.endEarly(), 1800);
@@ -328,7 +388,7 @@ export class ShoppingCart extends BaseGame {
       }
     }
 
-    // Cart-cart collisions (top-down xz plane)
+    // ── Cart-cart collisions ──
     const arr = [...this.carts.values()].filter(c => !c.finished);
     for (let i = 0; i < arr.length; i++) {
       for (let j = i + 1; j < arr.length; j++) {
@@ -341,18 +401,22 @@ export class ShoppingCart extends BaseGame {
           const d = Math.sqrt(d2);
           const overlap = minD - d;
           const nx = dx / d, nz = dz / d;
+          // Separate
           a.x -= nx * overlap * 0.5;
           a.z -= nz * overlap * 0.5;
           b.x += nx * overlap * 0.5;
           b.z += nz * overlap * 0.5;
-          // Push velocity transfer
-          if (Math.abs(a.vx) > Math.abs(b.vx)) {
-            b.vx = a.vx * 0.7;
-            a.vx *= 0.9;
-          } else {
-            a.vx = b.vx * 0.7;
-            b.vx *= 0.9;
+          // Impulse exchange along normal
+          const relVx = b.vx - a.vx;
+          const relVz = b.vz - a.vz;
+          const relDotN = relVx * nx + relVz * nz;
+          if (relDotN < 0) {
+            const restitution = 0.5;
+            const j2 = -(1 + restitution) * relDotN * 0.5;
+            a.vx -= j2 * nx; a.vz -= j2 * nz;
+            b.vx += j2 * nx; b.vz += j2 * nz;
           }
+          this.pendingEvents.push({ type: 'cart:collision', data: { a: a.socketId, b: b.socketId } });
         }
       }
     }
@@ -378,14 +442,20 @@ export class ShoppingCart extends BaseGame {
       y: Math.round(c.y * 10) / 10,
       z: Math.round(c.z * 10) / 10,
       vx: Math.round(c.vx),
+      vz: Math.round(c.vz * 10) / 10,
+      yaw: Math.round(c.yaw * 100) / 100,
       bs: now < c.boostUntil ? 1 : 0,
+      db: now < c.driftBoostUntil ? 1 : 0,
       sp: now < c.spinOutUntil ? 1 : 0,
+      dr: c.drifting ? 1 : 0,
+      dc: Math.round(c.driftCharge * 100),
       og: c.onGround ? 1 : 0,
       fn: c.finished ? c.finishRank : 0,
     }));
+    const forks = this.forks.map(f => ({ id: f.id, z: Math.round(f.z) }));
     const pickups = this.pickups.map(p => ({ id: p.id, a: p.active ? 1 : 0 }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.io.to(this.config.roomId).emit('cart:state' as any, { t: now, carts, pickups });
+    this.io.to(this.config.roomId).emit('cart:state' as any, { t: now, carts, pickups, forks });
 
     for (const ev of this.pendingEvents) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -404,7 +474,6 @@ export class ShoppingCart extends BaseGame {
       }
       this.io.to(this.config.roomId).emit('chaos:announcement', '🚀 EVERYONE GETS TURBO!');
     } else {
-      // Spin out random half
       const arr = [...this.carts.values()].filter(c => !c.finished);
       arr.sort(() => Math.random() - 0.5).slice(0, Math.ceil(arr.length / 2)).forEach(c => {
         c.spinOutUntil = Date.now() + 1500;
