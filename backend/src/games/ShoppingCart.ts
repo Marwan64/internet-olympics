@@ -21,7 +21,7 @@ export const FINISH_X = 6800;
 export const LANE_HALF = 220;     // track is 440 wide
 const CART_R = 22;                // collision radius
 const PHYSICS_HZ = 30;
-const BROADCAST_HZ = 15;
+const BROADCAST_HZ = 20;
 
 // Forward physics
 const GRAVITY_FORWARD = 90;       // constant downhill acceleration

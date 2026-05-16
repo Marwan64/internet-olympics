@@ -64,7 +64,7 @@ interface RemoteCart {
   id: string; x: number; y: number; z: number; vx: number;
   bs: number; sp: number; og: number; fn: number;
 }
-interface Snapshot { t: number; carts: Map<string, RemoteCart> }
+interface Snapshot { t: number; clientT: number; carts: Map<string, RemoteCart> }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -399,7 +399,7 @@ export default function ShoppingCart() {
         map.set(c.id, c as RemoteCart);
         if (c.id === myId) ownServerRef.current = c;
       }
-      snapshotsRef.current.push({ t: data.t, carts: map });
+      snapshotsRef.current.push({ t: data.t, clientT: Date.now(), carts: map });
       if (snapshotsRef.current.length > 5) snapshotsRef.current.shift();
     };
 
@@ -515,14 +515,16 @@ export default function ShoppingCart() {
       const pl = room?.players.find(pp => pp.socketId === id);
       const colorHex = pl ? new THREE.Color(pl.color).getHex() : 0x7c3aed;
       const group = ensureCartMesh(id, colorHex);
-      // Apply terrain height
+      // Apply terrain height.
+      // Physics y=0 means on terrain, y<0 means ABOVE terrain (jump impulse is negative).
+      // Visual position: terrain_y MINUS cart.y so negative cart.y lifts the cart up.
       const ty = terrainHeight(cart.x);
-      group.position.set(cart.x, ty + cart.y, cart.z);
-      // Tilt cart with terrain slope
+      group.position.set(cart.x, ty - cart.y + 2, cart.z);
+      // Tilt nose down on downhill terrain (slope is negative going downhill,
+      // rotation.z negative tilts +X axis downward in Three.js right-hand coords).
       const dx = 30;
       const slope = (terrainHeight(cart.x + dx) - terrainHeight(cart.x - dx)) / (dx * 2);
-      group.rotation.z = -slope; // pitch
-      // Roll based on lateral velocity (steering visual)
+      group.rotation.z = slope;
       group.rotation.x = 0;
       // Body color tint when boosting
       const basket = group.children[0] as THREE.Mesh;
@@ -550,24 +552,34 @@ export default function ShoppingCart() {
 
     const own = ownServerRef.current;
     if (own) {
-      const ty = terrainHeight(own.x);
-      const targetCamX = own.x - 130;
-      const targetCamY = ty + 80;
-      const targetCamZ = own.z * 0.3;
+      // Predict cart X position forward between 20Hz server ticks using velocity.
+      // This eliminates the discrete "jump" every 50ms and makes the camera silky smooth.
+      const snap = snapshotsRef.current[snapshotsRef.current.length - 1];
+      const msSinceSnap = snap ? Math.min(Date.now() - snap.clientT, 80) : 0;
+      const predX = own.x + (own.vx * msSinceSnap) / 1000;
 
-      // Exponential decay: frame-rate independent. kXZ ~8%/frame @ 60fps, kY ~3.3%/frame (absorbs terrain bumps)
-      const kXZ = 1 - Math.exp(-5 * dt);
-      const kY  = 1 - Math.exp(-2 * dt);
+      // Actual cart visual height (ty - own.y lifts cart upward when own.y is negative = airborne)
+      const ty = terrainHeight(predX);
+      const cartVisY = ty - own.y;
+
+      // Camera sits 160 units behind and 100 units above the cart, partially follows lateral
+      const targetCamX = predX - 160;
+      const targetCamY = cartVisY + 100;
+      const targetCamZ = own.z * 0.5;
+
+      // kXZ fast (~11%/frame @60fps), kY slower (~5%/frame) so vertical is still stable
+      const kXZ = 1 - Math.exp(-7 * dt);
+      const kY  = 1 - Math.exp(-3 * dt);
 
       camera.position.x += (targetCamX - camera.position.x) * kXZ;
       camera.position.y += (targetCamY - camera.position.y) * kY;
       camera.position.z += (targetCamZ - camera.position.z) * kXZ;
 
-      // Smooth lookAt target so it doesn't snap with terrain
+      // lookAt target: 160 units ahead of cart at cart's actual height
       const sm = smoothLookRef.current;
-      sm.x += (own.x + 80 - sm.x) * kXZ;
-      sm.y += (ty + 10 - sm.y) * kY;
-      sm.z += (own.z * 0.5 - sm.z) * kXZ;
+      sm.x += (predX + 160 - sm.x) * kXZ;
+      sm.y += (cartVisY + 20 - sm.y) * kY;
+      sm.z += (own.z * 0.7 - sm.z) * kXZ;
       camera.lookAt(sm.x, sm.y, sm.z);
     }
 
