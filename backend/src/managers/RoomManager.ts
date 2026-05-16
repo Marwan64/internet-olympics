@@ -10,7 +10,22 @@ const DEFAULT_CONFIG: RoomConfig = {
   roundDuration: 60,
 };
 
-const GAME_PLAYLIST: GameType[] = ['speed-typing', 'fake-trivia', 'speed-typing'];
+const GAME_POOL: GameType[] = ['speed-typing', 'fake-trivia', 'mario-race'];
+
+function buildPlaylist(count: number): GameType[] {
+  const shuffled = [...GAME_POOL].sort(() => Math.random() - 0.5);
+  // Ensure no two consecutive identical games
+  const result: GameType[] = [];
+  for (const game of shuffled) {
+    if (result[result.length - 1] !== game) result.push(game);
+    if (result.length >= count) break;
+  }
+  while (result.length < count) {
+    const pick = GAME_POOL[Math.floor(Math.random() * GAME_POOL.length)];
+    if (result[result.length - 1] !== pick) result.push(pick);
+  }
+  return result;
+}
 
 const ROOM_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours max room life
 const EMPTY_ROOM_TTL_MS = 5 * 60 * 1000; // 5 min empty room cleanup
@@ -68,7 +83,7 @@ export class RoomManager {
       hostId: playerId,
       players: [host],
       status: 'lobby',
-      gamePlaylist: [...GAME_PLAYLIST].slice(0, roomConfig.gameCount),
+      gamePlaylist: buildPlaylist(roomConfig.gameCount),
       currentGameIndex: 0,
       config: roomConfig,
       chat: [],

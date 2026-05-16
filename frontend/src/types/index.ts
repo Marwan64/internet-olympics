@@ -52,6 +52,7 @@ export interface ChatMessage {
 export type GameType =
   | 'speed-typing'
   | 'fake-trivia'
+  | 'mario-race'
   | 'drawing'
   | 'physics-soccer'
   | 'ai-image-guess'

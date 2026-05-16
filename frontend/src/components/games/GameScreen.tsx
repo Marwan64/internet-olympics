@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useGameStore, useGameState, useActiveChaos } from '@/store/gameStore';
 import SpeedTypingGame from './SpeedTypingGame';
 import FakeTriviaGame from './FakeTriviaGame';
+import MarioGame from './MarioGame';
 import { useSocketActions } from '@/hooks/useSocket';
 import { ChaosAnnouncement, ChaosFlash, DiscoFilter } from '@/components/ui/ChaosOverlay';
 import ToastContainer from '@/components/ui/ToastContainer';
@@ -20,8 +21,8 @@ function MiniLeaderboard({ gameState }: { gameState: GameState }) {
     .filter((p: Player) => p.isConnected)
     .map((p: Player) => ({
       ...p,
-      roundScore: gameState.scores[p.id] ?? 0,
-      totalScore: gameState.totalScores[p.id] ?? 0,
+      roundScore: gameState.scores[p.socketId] ?? 0,
+      totalScore: gameState.totalScores[p.socketId] ?? 0,
     }))
     .sort((a: { roundScore: number }, b: { roundScore: number }) => b.roundScore - a.roundScore);
 
@@ -176,8 +177,9 @@ function GameResultsScreen() {
 
 function GameIntroScreen({ gameState }: { gameState: GameState }) {
   const gameNames: Record<string, { name: string; emoji: string; desc: string }> = {
-    'speed-typing': { name: 'Speed Typing Chaos', emoji: '⌨️', desc: 'Type the words as fast as you can. Chaos incoming.' },
+    'speed-typing': { name: 'Speed Typing Chaos', emoji: '⌨️', desc: 'Type the word shown. Space or Enter to submit. Don\'t break your combo!' },
     'fake-trivia': { name: 'Real or Fake?', emoji: '🧠', desc: 'Spot the AI-generated fake facts. Trust nobody.' },
+    'mario-race': { name: 'Mario Race!', emoji: '🍄', desc: 'Race to the 🏁 pipe! Stomp Goombas, hit ? blocks, use power-ups. First one in wins!' },
     'drawing': { name: 'Chaotic Drawing', emoji: '🎨', desc: 'Draw. Laugh. Regret.' },
     'physics-soccer': { name: 'Physics Soccer', emoji: '⚽', desc: 'Ragdoll physics. Pure chaos.' },
   };
@@ -304,7 +306,8 @@ export default function GameScreen() {
                 <motion.div key={`game-${gameState.type}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                   {gameState.type === 'speed-typing' && <SpeedTypingGame />}
                   {gameState.type === 'fake-trivia' && <FakeTriviaGame />}
-                  {!['speed-typing', 'fake-trivia'].includes(gameState.type) && (
+                  {gameState.type === 'mario-race' && <MarioGame />}
+                  {!['speed-typing', 'fake-trivia', 'mario-race'].includes(gameState.type) && (
                     <div className="flex items-center justify-center h-64 text-white/50 text-xl">
                       Coming soon: {gameState.type} 🚧
                     </div>

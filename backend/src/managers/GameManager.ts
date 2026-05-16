@@ -4,6 +4,7 @@ import { RoomManager } from './RoomManager';
 import { BaseGame, GameConfig } from '../games/BaseGame';
 import { SpeedTypingGame } from '../games/SpeedTyping';
 import { FakeTriviaGame } from '../games/FakeTrivia';
+import { MarioGame } from '../games/MarioGame';
 import { logger } from '../utils/logger';
 
 // ── Game Registry ──────────────────────────────────────────────────────────────
@@ -13,10 +14,11 @@ type GameConstructor = new (io: Server, config: GameConfig, prevScores: Record<s
 const GAME_REGISTRY: Record<GameType, GameConstructor> = {
   'speed-typing': SpeedTypingGame,
   'fake-trivia': FakeTriviaGame,
-  'drawing': SpeedTypingGame,           // placeholder until built
-  'physics-soccer': SpeedTypingGame,    // placeholder until built
-  'ai-image-guess': FakeTriviaGame,     // placeholder until built
-  'sound-mimic': FakeTriviaGame,        // placeholder until built
+  'mario-race': MarioGame,
+  'drawing': SpeedTypingGame,
+  'physics-soccer': SpeedTypingGame,
+  'ai-image-guess': FakeTriviaGame,
+  'sound-mimic': FakeTriviaGame,
 };
 
 // ── Manager ────────────────────────────────────────────────────────────────────
