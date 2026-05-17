@@ -164,6 +164,25 @@ export default function PodiumScreen() {
         )}
 
         {/* Action buttons */}
+        {/* Donate */}
+        <motion.a
+          href="https://cash.app/$MarMar642"
+          target="_blank"
+          rel="noopener noreferrer"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.1 }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm mb-4 transition-all hover:scale-105"
+          style={{
+            background: 'linear-gradient(135deg, #00C853, #009624)',
+            color: '#fff',
+            boxShadow: '0 4px 14px rgba(0,200,83,0.3)',
+            textDecoration: 'none',
+          }}
+        >
+          💚 Enjoyed the game? Support the dev — $MarMar642
+        </motion.a>
+
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

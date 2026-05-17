@@ -367,9 +367,24 @@ function HomeContent() {
       </section>
 
       {/* Footer */}
-      <footer className="relative z-10 text-center py-8 text-white/20 text-sm"
+      <footer className="relative z-10 text-center py-10 text-white/20 text-sm"
         style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-        Internet Olympics — Built for chaos, friendship, and viral clips.
+        <p className="mb-4">Internet Olympics — Built for chaos, friendship, and viral clips.</p>
+        <a
+          href="https://cash.app/$MarMar642"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold text-sm transition-all hover:scale-105 active:scale-95"
+          style={{
+            background: 'linear-gradient(135deg, #00C853, #009624)',
+            color: '#fff',
+            boxShadow: '0 4px 16px rgba(0,200,83,0.35)',
+            textDecoration: 'none',
+          }}
+        >
+          <span style={{ fontSize: '1.1em' }}>💚</span>
+          Support the dev — Cash App $MarMar642
+        </a>
       </footer>
 
       <ToastContainer />
