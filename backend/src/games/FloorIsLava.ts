@@ -117,6 +117,26 @@ export class FloorIsLava extends BaseGame {
         if (typeof input.payload.z === 'number') p.z = input.payload.z;
         break;
 
+      case 'lava_bat': {
+        const targetId = input.payload.targetId as string;
+        const target = this.players.get(targetId);
+        if (!target || !target.alive || !p.alive) break;
+        const dx = target.x - p.x;
+        const dz = target.z - p.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist > 4.5) break;
+        const len = Math.max(0.3, dist);
+        const KBF = 20;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        this.io.to(this.config.roomId).emit('lava:hit' as any, {
+          id: targetId,
+          vx: (dx / len) * KBF,
+          vy: 6,
+          vz: (dz / len) * KBF,
+        });
+        break;
+      }
+
       case 'lava_die':
         if (p.alive) {
           p.alive = false;

@@ -104,8 +104,25 @@ function buildPlatforms(): PlatDef[] {
     { cx: -4, cy:44.5, cz:  2, w:4, h:1, d:4, color: 0xfbbf24,
       moving: { axis:'z', amp:3, spd:0.58 } },
 
-    // ── Apex – glowing gold (top=49, cy=48.5) ─────────────────────────────
+    // ── Old apex platform (top=49, cy=48.5) ──────────────────────────────
     { cx:  0, cy:48.5, cz:  0, w:5, h:1, d:5, color: 0xfde047 },
+
+    // ── Layer 12 (top=53, cy=52.5) ────────────────────────────────────────
+    { cx: -3, cy:52.5, cz:  3, w:4, h:1, d:3, color: 0xe879f9,
+      moving: { axis:'x', amp:3, spd:0.6 } },
+    { cx:  5, cy:52.5, cz: -3, w:4, h:1, d:3, color: 0xe879f9 },
+
+    // ── Layer 13 (top=57, cy=56.5) ────────────────────────────────────────
+    { cx: -2, cy:56.5, cz: -2, w:4, h:1, d:3, color: 0xfda4af,
+      moving: { axis:'z', amp:2, spd:0.65 } },
+    { cx:  4, cy:56.5, cz:  2, w:3, h:1, d:3, color: 0xfda4af },
+
+    // ── Layer 14 (top=61, cy=60.5) ────────────────────────────────────────
+    { cx:  0, cy:60.5, cz:  0, w:4, h:1, d:3, color: 0xfef08a,
+      moving: { axis:'x', amp:2, spd:0.7 } },
+
+    // ── NEW Apex – glowing white-gold (top=65, cy=64.5) ───────────────────
+    { cx:  0, cy:64.5, cz:  0, w:4, h:1, d:4, color: 0xfef9c3 },
   ];
 
   return raw.map((p, idx) => ({ ...p, idx }));
@@ -140,10 +157,12 @@ export default function FloorIsLava() {
   const { sendInput } = useSocketActions();
 
   // ── Mobile touch input refs (readable inside the game loop) ───────────────
-  const touchJoyRef  = useRef({ dx: 0, dz: 0 });
-  const touchJumpRef = useRef(false);
-  const joyOriginRef = useRef({ x: 0, y: 0 });
+  const touchJoyRef   = useRef({ dx: 0, dz: 0 });
+  const touchJumpRef  = useRef(false);
+  const touchSwingRef = useRef(false);
+  const joyOriginRef  = useRef({ x: 0, y: 0 });
   const [joyVisual, setJoyVisual] = useState({ x: 0, y: 0 });
+  const [batReady, setBatReady]   = useState(true);
 
   const [eliminated, setEliminated] = useState(false);
   const [aliveCount, setAliveCount] = useState(0);
@@ -197,7 +216,7 @@ export default function FloorIsLava() {
 
     // Apex spotlight to draw the eye upward
     const apexLight = new THREE.PointLight(0xfde047, 3, 20);
-    apexLight.position.set(0, 55, 0);
+    apexLight.position.set(0, 72, 0);
     scene.add(apexLight);
 
     // ── Platforms ─────────────────────────────────────────────────────────────
@@ -269,6 +288,20 @@ export default function FloorIsLava() {
     eyeL.position.set(-0.15, 1.32, -0.31);
     eyeR.position.set( 0.15, 1.32, -0.31);
     playerGroup.add(bodyMesh, headMesh, eyeL, eyeR);
+
+    // Bat — wooden cylinder held at player's right side
+    const batPivot = new THREE.Group();
+    batPivot.position.set(0, 0.5, 0);
+    batPivot.rotation.y = 1.2; // rest: pulled back right
+    const batGeo = new THREE.CylinderGeometry(0.05, 0.1, 1.1, 8);
+    const batMat = new THREE.MeshStandardMaterial({ color: 0x8b5e3c, roughness: 0.7 });
+    const batMeshObj = new THREE.Mesh(batGeo, batMat);
+    batMeshObj.position.set(0.45, 0.4, 0);
+    batMeshObj.rotation.z = -0.5;
+    batMeshObj.castShadow = true;
+    batPivot.add(batMeshObj);
+    playerGroup.add(batPivot);
+
     scene.add(playerGroup);
 
     // Shadow blob under player
@@ -314,8 +347,10 @@ export default function FloorIsLava() {
     const chaosState = { lowGravity: false, slippery: false };
 
     // ── Input ─────────────────────────────────────────────────────────────────
-    const keys = { w:false, a:false, s:false, d:false, space:false, shift:false, q:false, e:false };
+    const keys = { w:false, a:false, s:false, d:false, space:false, shift:false, q:false, e:false, f:false };
     let spaceWas = false;
+    let fWas     = false;
+    const batState = { swinging: false, t: 0, cooldown: 0, hitSent: false };
     let isEliminated = false;
 
     const onKD = (e: KeyboardEvent) => {
@@ -328,6 +363,7 @@ export default function FloorIsLava() {
         case 'ShiftLeft': keys.shift = true; break;
         case 'KeyQ':    keys.q     = true; break;
         case 'KeyE':    keys.e     = true; break;
+        case 'KeyF':    keys.f     = true; break;
       }
     };
     const onKU = (e: KeyboardEvent) => {
@@ -340,6 +376,7 @@ export default function FloorIsLava() {
         case 'ShiftLeft': keys.shift = false; break;
         case 'KeyQ':    keys.q     = false; break;
         case 'KeyE':    keys.e     = false; break;
+        case 'KeyF':    keys.f     = false; break;
       }
     };
     window.addEventListener('keydown', onKD);
@@ -411,6 +448,16 @@ export default function FloorIsLava() {
     (sock as any).on('lava:eliminated', onEliminated);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (sock as any).on('lava:chaos', onChaos);
+
+    const onLavaHit = (data: { id: string; vx: number; vy: number; vz: number }) => {
+      if (data.id === sock.id && ps.alive) {
+        ps.vel.x += data.vx;
+        ps.vel.y += data.vy;
+        ps.vel.z += data.vz;
+      }
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (sock as any).on('lava:hit', onLavaHit);
 
     // ── Position send throttle ────────────────────────────────────────────────
     let lastSend = 0;
@@ -509,6 +556,44 @@ export default function FloorIsLava() {
           }
         }
         spaceWas = keys.space;
+
+        // Bat swing
+        if (batState.swinging) {
+          const progress = Math.min(1, batState.t / 0.35);
+          batPivot.rotation.y = 1.2 + (-2.8 - 1.2) * progress;
+          batState.t += dt;
+          if (!batState.hitSent && progress >= 0.5) {
+            batState.hitSent = true;
+            let closest: string | null = null;
+            let closestDist = 2.8;
+            for (const [ghostId, ghost] of ghosts) {
+              if (!ghost.visible) continue;
+              const d = ghost.position.distanceTo(playerGroup.position);
+              if (d < closestDist) { closestDist = d; closest = ghostId; }
+            }
+            if (closest) sendInput('lava_bat', { targetId: closest });
+          }
+          if (batState.t >= 0.35) {
+            batState.swinging = false;
+            batState.t = 0;
+            batState.cooldown = 1500;
+            batPivot.rotation.y = 1.2;
+            setBatReady(false);
+          }
+        } else {
+          if (batState.cooldown > 0) {
+            batState.cooldown -= dt * 1000;
+            if (batState.cooldown <= 0) { batState.cooldown = 0; setBatReady(true); }
+          }
+          const swingPressed = (keys.f && !fWas) || touchSwingRef.current;
+          if (touchSwingRef.current) touchSwingRef.current = false;
+          if (swingPressed && batState.cooldown <= 0) {
+            batState.swinging = true;
+            batState.t = 0;
+            batState.hitSent = false;
+          }
+        }
+        fWas = keys.f;
 
         // Coyote countdown
         if (ps.coyoteMs > 0) ps.coyoteMs -= dt * 1000;
@@ -652,6 +737,8 @@ export default function FloorIsLava() {
       (sock as any).off('lava:eliminated', onEliminated);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (sock as any).off('lava:chaos', onChaos);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (sock as any).off('lava:hit', onLavaHit);
       if (document.pointerLockElement === cvs) document.exitPointerLock();
       renderer.dispose();
       if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
@@ -671,6 +758,14 @@ export default function FloorIsLava() {
         <div className="absolute top-3 left-3 glass rounded-xl px-3 py-2 flex items-center gap-2">
           <span className="text-lg">👥</span>
           <span className="text-white font-mono text-sm font-bold">{aliveCount} alive</span>
+        </div>
+
+        {/* Bat cooldown indicator */}
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 glass rounded-xl px-3 py-2 flex items-center gap-2">
+          <span className="text-lg">🏏</span>
+          <span className={`font-mono text-sm font-bold ${batReady ? 'text-yellow-300' : 'text-white/40'}`}>
+            {batReady ? 'BAT READY [F]' : 'COOLDOWN...'}
+          </span>
         </div>
 
         {/* Top-right: height meter */}
@@ -735,7 +830,7 @@ export default function FloorIsLava() {
 
         {/* Controls hint (desktop) */}
         <div className="absolute bottom-3 left-3 text-white/25 text-xs font-mono leading-relaxed hidden sm:block">
-          WASD move · SPACE jump · SHIFT sprint · Click canvas to lock mouse
+          WASD move · SPACE jump · SHIFT sprint · F swing bat · Click canvas to lock mouse
         </div>
 
         {/* Mobile touch controls */}
@@ -794,6 +889,21 @@ export default function FloorIsLava() {
             onTouchStart={e => { e.preventDefault(); touchJumpRef.current = true; }}
           >
             JUMP
+          </div>
+
+          {/* Swing button — above jump */}
+          <div
+            className="absolute pointer-events-auto select-none flex items-center justify-center"
+            style={{
+              bottom: 110, right: 20, width: 64, height: 64, borderRadius: '50%',
+              background: batReady ? 'rgba(139,94,60,0.85)' : 'rgba(80,50,30,0.45)',
+              border: `2px solid ${batReady ? 'rgba(180,120,70,0.9)' : 'rgba(100,70,40,0.5)'}`,
+              touchAction: 'none', fontWeight: 900, fontSize: 11, color: '#fff', letterSpacing: 1,
+              transition: 'background 0.2s, border 0.2s',
+            }}
+            onTouchStart={e => { e.preventDefault(); if (batReady) touchSwingRef.current = true; }}
+          >
+            🏏 BAT
           </div>
         </div>
       </div>
