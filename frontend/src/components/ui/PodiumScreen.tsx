@@ -1,29 +1,42 @@
 'use client';
 
-import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/store/gameStore';
 import { useSocketActions } from '@/hooks/useSocket';
 import { PlayerResult } from '@/types';
 import ToastContainer from './ToastContainer';
 
-const RANK_COLORS = ['#F59E0B', '#9CA3AF', '#B45309'];
-const RANK_LABELS = ['🥇 CHAMPION', '🥈 RUNNER-UP', '🥉 THIRD'];
-const RANK_HEIGHTS = ['h-48', 'h-36', 'h-28'];
+const T = {
+  bg:      '#F4EEE2',
+  bg2:     '#EDE5D2',
+  paper:   '#FBF7EE',
+  ink:     '#14161B',
+  ink2:    '#2A2D36',
+  ink3:    '#5A5F6C',
+  line:    'rgba(20,22,27,0.12)',
+  lineStr: 'rgba(20,22,27,0.22)',
+  torch:   '#E94F1D',
+  lake:    '#1F5BD8',
+  gold:    '#F4B400',
+  leaf:    '#1E5A3A',
+  grape:   '#5E37B7',
+};
+const D = { display: "'Bricolage Grotesque',system-ui,sans-serif" as const };
+const SERIF = "'Instrument Serif',Georgia,serif" as const;
+
+const RANK_ACCENT = [T.gold, T.ink3, '#B45309'];
+const RANK_HEIGHTS = [192, 140, 112];
+const RANK_EMOJI = ['🥇','🥈','🥉'];
 
 export default function PodiumScreen() {
   const podiumData = useGameStore((s) => s.podiumData);
-  const playerId = useGameStore((s) => s.playerId);
+  const playerId   = useGameStore((s) => s.playerId);
   const { leaveRoom } = useSocketActions();
-
-  useEffect(() => {
-    // Trigger confetti-like particle burst on mount
-  }, []);
 
   if (!podiumData) return null;
 
-  const top3 = podiumData.players.slice(0, 3);
-  const rest = podiumData.players.slice(3);
+  const top3  = podiumData.players.slice(0, 3);
+  const rest  = podiumData.players.slice(3);
   const myRank = podiumData.players.findIndex((p) => p.playerId === playerId) + 1;
 
   function handlePlayAgain() {
@@ -31,47 +44,52 @@ export default function PodiumScreen() {
     useGameStore.getState().clearGame();
   }
 
-  function handleLeave() {
-    leaveRoom();
-  }
+  // Podium order: 2nd, 1st, 3rd
+  const podiumOrder = [top3[1], top3[0], top3[2]];
+  const podiumRanks = [2, 1, 3];
 
   return (
-    <div className="min-h-screen bg-game-bg flex flex-col overflow-hidden relative">
-      {/* Animated background */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute inset-0" style={{
-          background: 'radial-gradient(ellipse at 50% 0%, rgba(245,158,11,0.15) 0%, transparent 60%)',
-        }} />
-      </div>
+    <div style={{ minHeight:'100vh', background: T.bg, display:'flex', flexDirection:'column', overflowX:'hidden' }}>
+      <style>{`
+        .pod-btn { transition: transform .15s ease; }
+        .pod-btn:hover { transform: translateY(-2px); }
+        @keyframes pod-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+      `}</style>
 
-      <div className="relative z-10 flex flex-col items-center min-h-screen px-4 py-8">
-        {/* Title */}
-        <motion.div
-          initial={{ opacity: 0, y: -30 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-12"
-        >
-          <div className="text-6xl mb-4 animate-bounce">🏆</div>
-          <h1 className="font-display font-black text-5xl sm:text-6xl text-white mb-2"
-            style={{
-              background: 'linear-gradient(135deg, #F59E0B, #EC4899, #7C3AED)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-            }}>
-            GAME OVER
+      <div style={{ maxWidth:720, margin:'0 auto', padding:'48px 24px 64px', width:'100%' }}>
+
+        {/* Header */}
+        <motion.div initial={{ opacity:0, y:-20 }} animate={{ opacity:1, y:0 }}
+          style={{ textAlign:'center', marginBottom:48 }}>
+
+          <div style={{ fontSize:64, marginBottom:12, display:'inline-block', animation:'pod-float 3s ease-in-out infinite' }}>🏆</div>
+
+          <h1 style={{
+            fontFamily: D.display, fontWeight:800, color: T.ink, margin:0,
+            fontSize:'clamp(52px,10vw,96px)', lineHeight:.9, letterSpacing:'-0.045em',
+          }}>
+            Game{' '}
+            <em style={{ fontFamily: SERIF, fontStyle:'italic', fontWeight:400, color: T.torch }}>Over</em>
           </h1>
+
           {podiumData.champion && (
-            <p className="text-white/70 text-xl mt-2">
-              {podiumData.champion.avatar} <strong className="text-white">{podiumData.champion.username}</strong> wins! 🎉
+            <p style={{ fontFamily: D.display, fontSize:18, color: T.ink2, marginTop:12 }}>
+              {podiumData.champion.avatar}{' '}
+              <strong style={{ color: T.ink }}>{podiumData.champion.username}</strong>
+              {' '}wins! 🎉
             </p>
           )}
+
           {myRank > 0 && myRank <= 3 && (
             <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 1, type: 'spring', stiffness: 300 }}
-              className="inline-block mt-3 px-4 py-2 rounded-full font-bold"
-              style={{ background: 'rgba(245,158,11,0.2)', border: '1px solid rgba(245,158,11,0.4)', color: '#F59E0B' }}
+              initial={{ scale:0 }} animate={{ scale:1 }}
+              transition={{ delay:1, type:'spring', stiffness:280 }}
+              style={{
+                display:'inline-block', marginTop:10,
+                padding:'6px 16px', borderRadius:999,
+                background:`${T.torch}14`, border:`1px solid ${T.torch}55`,
+                fontFamily: D.display, fontWeight:700, fontSize:14, color: T.torch,
+              }}
             >
               You finished #{myRank}! {myRank === 1 ? '🎊' : myRank === 2 ? '🥈' : '🥉'}
             </motion.div>
@@ -79,45 +97,38 @@ export default function PodiumScreen() {
         </motion.div>
 
         {/* Podium */}
-        <div className="flex items-end justify-center gap-2 mb-12 w-full max-w-lg">
-          {/* Rearrange to 2nd, 1st, 3rd order */}
-          {[top3[1], top3[0], top3[2]].map((player, visualIdx) => {
-            if (!player) return <div key={visualIdx} className="flex-1" />;
-            const actualRank = visualIdx === 0 ? 2 : visualIdx === 1 ? 1 : 3;
-            const heightClass = RANK_HEIGHTS[actualRank - 1];
-            const color = RANK_COLORS[actualRank - 1];
+        <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'center', gap:8, marginBottom:36, width:'100%' }}>
+          {podiumOrder.map((player, visualIdx) => {
+            if (!player) return <div key={visualIdx} style={{ flex:1 }} />;
+            const rank   = podiumRanks[visualIdx];
+            const accent = RANK_ACCENT[rank - 1];
+            const height = RANK_HEIGHTS[rank - 1];
 
             return (
-              <motion.div
-                key={player.playerId}
-                className="flex-1 flex flex-col items-center"
-                initial={{ opacity: 0, y: 40 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: actualRank * 0.2, type: 'spring', stiffness: 200 }}
-              >
-                {/* Player card */}
-                <div className="flex flex-col items-center mb-2">
-                  <div
-                    className="w-14 h-14 rounded-full flex items-center justify-center text-2xl mb-1"
-                    style={{ background: `${player.color}30`, border: `3px solid ${player.color}`, boxShadow: `0 0 15px ${player.color}60` }}
-                  >
-                    {player.avatar}
-                  </div>
-                  <div className="text-white font-bold text-sm text-center truncate max-w-[80px]">{player.username}</div>
-                  <div className="font-display font-black text-lg" style={{ color }}>{player.totalScore.toLocaleString()}</div>
+              <motion.div key={player.playerId} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center' }}
+                initial={{ opacity:0, y:40 }} animate={{ opacity:1, y:0 }}
+                transition={{ delay: rank * 0.18, type:'spring', stiffness:200 }}>
+
+                {/* Player avatar + name */}
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', marginBottom:10 }}>
+                  <div style={{
+                    width:52, height:52, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
+                    fontSize:24, marginBottom:4,
+                    background:`${player.color}22`, border:`3px solid ${player.color}`,
+                    boxShadow:`0 0 16px ${player.color}55`,
+                  }}>{player.avatar}</div>
+                  <div style={{ fontFamily: D.display, fontWeight:700, fontSize:12, color: T.ink, textAlign:'center', maxWidth:80, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{player.username}</div>
+                  <div style={{ fontFamily: D.display, fontWeight:800, fontSize:16, color: accent, marginTop:2 }}>{player.totalScore.toLocaleString()}</div>
                 </div>
 
                 {/* Podium block */}
-                <div
-                  className={`w-full ${heightClass} rounded-t-xl flex flex-col items-center justify-start pt-3`}
-                  style={{
-                    background: `linear-gradient(180deg, ${color}30 0%, ${color}15 100%)`,
-                    border: `1px solid ${color}50`,
-                    borderBottom: 'none',
-                  }}
-                >
-                  <div className="text-2xl">{actualRank === 1 ? '🥇' : actualRank === 2 ? '🥈' : '🥉'}</div>
-                  <div className="font-display font-bold text-sm" style={{ color }}>#{actualRank}</div>
+                <div style={{
+                  width:'100%', height, borderRadius:'12px 12px 0 0',
+                  background:`${accent}18`, border:`1.5px solid ${accent}55`, borderBottom:'none',
+                  display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-start', paddingTop:14,
+                }}>
+                  <div style={{ fontSize:24 }}>{RANK_EMOJI[rank - 1]}</div>
+                  <div style={{ fontFamily: D.display, fontWeight:800, fontSize:14, color: accent, marginTop:4 }}>#{rank}</div>
                 </div>
               </motion.div>
             );
@@ -126,13 +137,9 @@ export default function PodiumScreen() {
 
         {/* Rest of leaderboard */}
         {rest.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.8 }}
-            className="w-full max-w-md glass rounded-2xl p-4 mb-8"
-          >
-            <div className="space-y-2">
+          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:.7 }}
+            style={{ background: T.paper, border:`1px solid ${T.line}`, borderRadius:18, padding:16, marginBottom:24 }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
               {rest.map((player) => (
                 <LeaderboardRow key={player.playerId} player={player} isMe={player.playerId === playerId} />
               ))}
@@ -142,69 +149,54 @@ export default function PodiumScreen() {
 
         {/* Awards */}
         {podiumData.awards.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1 }}
-            className="flex flex-wrap justify-center gap-3 mb-10 max-w-lg"
-          >
+          <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:.9 }}
+            style={{ display:'flex', flexWrap:'wrap', justifyContent:'center', gap:10, marginBottom:28 }}>
             {podiumData.awards.map((award) => {
               const player = podiumData.players.find((p) => p.playerId === award.playerId);
               if (!player) return null;
               return (
-                <div key={award.title} className="glass rounded-xl px-4 py-3 text-center"
-                  style={{ border: '1px solid rgba(245,158,11,0.3)' }}>
-                  <div className="text-2xl mb-1">{award.emoji}</div>
-                  <div className="font-bold text-white text-xs">{award.title}</div>
-                  <div className="text-white/50 text-xs">{player.avatar} {player.username}</div>
+                <div key={award.title} style={{
+                  background: T.paper, border:`1px solid ${T.gold}55`,
+                  borderRadius:14, padding:'12px 16px', textAlign:'center',
+                }}>
+                  <div style={{ fontSize:24, marginBottom:4 }}>{award.emoji}</div>
+                  <div style={{ fontFamily: D.display, fontWeight:700, fontSize:12, color: T.ink }}>{award.title}</div>
+                  <div style={{ fontSize:12, color: T.ink3, marginTop:2 }}>{player.avatar} {player.username}</div>
                 </div>
               );
             })}
           </motion.div>
         )}
 
-        {/* Action buttons */}
-        {/* Donate */}
-        <motion.a
-          href="https://cash.app/$MarMar642"
-          target="_blank"
-          rel="noopener noreferrer"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.1 }}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm mb-4 transition-all hover:scale-105"
-          style={{
-            background: 'linear-gradient(135deg, #00C853, #009624)',
-            color: '#fff',
-            boxShadow: '0 4px 14px rgba(0,200,83,0.3)',
-            textDecoration: 'none',
-          }}
-        >
-          💚 Enjoyed the game? Support the dev — $MarMar642
-        </motion.a>
+        {/* Buttons */}
+        <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:1 }}
+          style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12 }}>
 
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.2 }}
-          className="flex gap-4"
-        >
-          <button
-            onClick={handlePlayAgain}
-            className="font-display font-bold text-white px-8 py-4 rounded-2xl text-lg transition-all hover:scale-105 active:scale-95"
+          <a href="https://cash.app/$MarMar642" target="_blank" rel="noopener noreferrer" className="pod-btn"
             style={{
-              background: 'linear-gradient(135deg, #7C3AED, #EC4899)',
-              boxShadow: '0 4px 20px rgba(124,58,237,0.5)',
-            }}
-          >
-            🔄 Play Again
-          </button>
-          <button
-            onClick={handleLeave}
-            className="font-display font-bold text-white/70 px-8 py-4 rounded-2xl text-lg transition-all hover:text-white hover:bg-white/10"
-          >
-            🚪 Leave
-          </button>
+              display:'inline-flex', alignItems:'center', gap:8, padding:'10px 20px',
+              borderRadius:999, background:'linear-gradient(135deg,#00C853,#009624)',
+              color:'#fff', textDecoration:'none',
+              fontFamily: D.display, fontWeight:600, fontSize:13,
+              boxShadow:'0 4px 14px rgba(0,200,83,0.28)',
+            }}>
+            💚 Enjoyed it? Support the dev — $MarMar642
+          </a>
+
+          <div style={{ display:'flex', gap:10 }}>
+            <button onClick={handlePlayAgain} className="pod-btn" style={{
+              padding:'14px 32px', borderRadius:999, border:'none', cursor:'pointer',
+              fontFamily: D.display, fontWeight:700, fontSize:16,
+              background: T.torch, color: T.paper,
+              boxShadow:`0 6px 20px -6px ${T.torch}88`,
+            }}>🔄 Play Again</button>
+            <button onClick={leaveRoom} className="pod-btn" style={{
+              padding:'14px 32px', borderRadius:999, cursor:'pointer',
+              fontFamily: D.display, fontWeight:700, fontSize:16,
+              background:'transparent', color: T.ink2,
+              border:`1px solid ${T.lineStr}`,
+            }}>Leave →</button>
+          </div>
         </motion.div>
       </div>
 
@@ -215,18 +207,20 @@ export default function PodiumScreen() {
 
 function LeaderboardRow({ player, isMe }: { player: PlayerResult; isMe: boolean }) {
   return (
-    <div className={`leaderboard-row ${isMe ? 'ring-1 ring-brand-purple' : ''}`}>
-      <span className="text-white/50 font-bold text-sm w-6 text-center">#{player.rank}</span>
-      <div
-        className="w-8 h-8 rounded-full flex items-center justify-center text-base shrink-0"
-        style={{ background: `${player.color}30`, border: `2px solid ${player.color}` }}
-      >
-        {player.avatar}
-      </div>
-      <span className="flex-1 text-white font-medium text-sm truncate">
-        {player.username} {isMe && <span className="text-brand-purple text-xs">(you)</span>}
+    <div style={{
+      display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderRadius:12,
+      background: isMe ? `${T.torch}0f` : T.bg2,
+      border:`1px solid ${isMe ? `${T.torch}44` : T.line}`,
+    }}>
+      <span style={{ fontFamily:'monospace', fontWeight:700, fontSize:13, color: T.ink3, width:24, textAlign:'center' }}>#{player.rank}</span>
+      <div style={{
+        width:34, height:34, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
+        fontSize:17, flexShrink:0, background:`${player.color}22`, border:`2px solid ${player.color}`,
+      }}>{player.avatar}</div>
+      <span style={{ flex:1, fontFamily: D.display, fontWeight:600, fontSize:14, color: T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+        {player.username} {isMe && <span style={{ color: T.torch, fontSize:11 }}>(you)</span>}
       </span>
-      <span className="font-display font-bold text-white">{player.totalScore.toLocaleString()}</span>
+      <span style={{ fontFamily: D.display, fontWeight:800, fontSize:15, color: T.ink }}>{player.totalScore.toLocaleString()}</span>
     </div>
   );
 }

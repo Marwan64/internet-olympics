@@ -3,40 +3,47 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useToasts, useGameStore } from '@/store/gameStore';
 
-const TOAST_STYLES = {
-  info:    { border: '#3B82F6', bg: 'rgba(59,130,246,0.15)', icon: 'ℹ️' },
-  success: { border: '#10B981', bg: 'rgba(16,185,129,0.15)', icon: '✅' },
-  error:   { border: '#EF4444', bg: 'rgba(239,68,68,0.15)',  icon: '❌' },
-  warning: { border: '#F59E0B', bg: 'rgba(245,158,11,0.15)', icon: '⚠️' },
-  chaos:   { border: '#EC4899', bg: 'rgba(236,72,153,0.15)', icon: '⚡' },
+const STYLES = {
+  info:    { border: '#1F5BD8', bg: '#FBF7EE', icon: 'ℹ️',  color: '#1F5BD8' },
+  success: { border: '#1E5A3A', bg: '#FBF7EE', icon: '✅',  color: '#1E5A3A' },
+  error:   { border: '#B91C1C', bg: '#FFF0EE', icon: '❌',  color: '#B91C1C' },
+  warning: { border: '#F4B400', bg: '#FFFBEA', icon: '⚠️',  color: '#92400e' },
+  chaos:   { border: '#5E37B7', bg: '#FBF7EE', icon: '⚡',  color: '#5E37B7' },
 };
 
 export default function ToastContainer() {
-  const toasts = useToasts();
+  const toasts      = useToasts();
   const removeToast = useGameStore((s) => s.removeToast);
 
   return (
-    <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-3 pointer-events-none max-w-sm w-full">
+    <div style={{
+      position:'fixed', top:16, right:16, zIndex:9999,
+      display:'flex', flexDirection:'column', gap:10,
+      pointerEvents:'none', maxWidth:340, width:'100%',
+    }}>
       <AnimatePresence>
         {toasts.map((toast) => {
-          const style = TOAST_STYLES[toast.type];
+          const s = STYLES[toast.type];
           return (
             <motion.div
               key={toast.id}
-              initial={{ opacity: 0, x: 60, scale: 0.9 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 60, scale: 0.9 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-              className="pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-2xl cursor-pointer backdrop-blur-md"
-              style={{
-                background: style.bg,
-                border: `1px solid ${style.border}40`,
-                boxShadow: `0 4px 20px rgba(0,0,0,0.3), 0 0 0 1px ${style.border}20`,
-              }}
+              initial={{ opacity:0, x:50, scale:.93 }}
+              animate={{ opacity:1, x:0, scale:1 }}
+              exit={{ opacity:0, x:50, scale:.93 }}
+              transition={{ type:'spring', stiffness:400, damping:28 }}
               onClick={() => removeToast(toast.id)}
+              style={{
+                pointerEvents:'auto', display:'flex', alignItems:'flex-start', gap:10,
+                padding:'12px 16px', borderRadius:14, cursor:'pointer',
+                background: s.bg, border:`1.5px solid ${s.border}55`,
+                boxShadow:`0 4px 16px rgba(20,22,27,0.12), 0 0 0 1px ${s.border}18`,
+              }}
             >
-              <span className="text-lg shrink-0 mt-0.5">{style.icon}</span>
-              <span className="text-sm text-white font-medium leading-snug">{toast.message}</span>
+              <span style={{ fontSize:16, flexShrink:0, marginTop:1 }}>{s.icon}</span>
+              <span style={{
+                fontSize:13, color:'#14161B', fontWeight:500, lineHeight:1.45,
+                fontFamily:"'Bricolage Grotesque',system-ui,sans-serif",
+              }}>{toast.message}</span>
             </motion.div>
           );
         })}

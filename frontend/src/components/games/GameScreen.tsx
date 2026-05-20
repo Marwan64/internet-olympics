@@ -13,10 +13,27 @@ import { ChaosAnnouncement, ChaosFlash, DiscoFilter } from '@/components/ui/Chao
 import ToastContainer from '@/components/ui/ToastContainer';
 import { GameState, Player, PlayerResult } from '@/types';
 
-// ── Leaderboard Sidebar ───────────────────────────────────────────────────────
+const T = {
+  bg:     '#F4EEE2',
+  paper:  '#FBF7EE',
+  ink:    '#14161B',
+  ink2:   '#2A2D36',
+  ink3:   '#5A5F6C',
+  line:   'rgba(20,22,27,0.12)',
+  lineStr:'rgba(20,22,27,0.22)',
+  torch:  '#E94F1D',
+  lake:   '#1F5BD8',
+  gold:   '#F4B400',
+  leaf:   '#1E5A3A',
+  grape:  '#5E37B7',
+};
+const D = { display: "'Bricolage Grotesque',system-ui,sans-serif" as const };
+const SERIF = "'Instrument Serif',Georgia,serif" as const;
+
+// ── Mini Leaderboard ──────────────────────────────────────────────────────────
 
 function MiniLeaderboard({ gameState }: { gameState: GameState }) {
-  const room = useGameStore((s) => s.room);
+  const room     = useGameStore((s) => s.room);
   const playerId = useGameStore((s) => s.playerId);
   if (!room) return null;
 
@@ -25,29 +42,24 @@ function MiniLeaderboard({ gameState }: { gameState: GameState }) {
     .map((p: Player) => ({
       ...p,
       roundScore: gameState.scores[p.socketId] ?? 0,
-      totalScore: gameState.totalScores[p.socketId] ?? 0,
     }))
     .sort((a: { roundScore: number }, b: { roundScore: number }) => b.roundScore - a.roundScore);
 
   return (
-    <div className="space-y-2">
+    <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
       {entries.map((p: Player & { roundScore: number }, idx: number) => (
-        <motion.div
-          key={p.id}
-          layout
-          className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${
-            p.id === playerId ? 'bg-brand-purple/20 border border-brand-purple/30' : 'bg-white/5'
-          }`}
-        >
-          <span className="text-white/40 font-mono text-xs w-4">{idx + 1}</span>
-          <div
-            className="w-7 h-7 rounded-full flex items-center justify-center text-base shrink-0"
-            style={{ background: `${p.color}30`, border: `2px solid ${p.color}` }}
-          >
-            {p.avatar}
-          </div>
-          <span className="flex-1 text-sm text-white font-medium truncate">{p.username}</span>
-          <span className="font-display font-bold text-sm text-white">{p.roundScore.toLocaleString()}</span>
+        <motion.div key={p.id} layout style={{
+          display:'flex', alignItems:'center', gap:8, padding:'7px 10px', borderRadius:10,
+          background: p.id === playerId ? `${T.torch}0f` : 'rgba(20,22,27,0.04)',
+          border:`1px solid ${p.id === playerId ? `${T.torch}44` : T.line}`,
+        }}>
+          <span style={{ fontFamily:'monospace', fontSize:11, color: T.ink3, width:14, textAlign:'center' }}>{idx+1}</span>
+          <div style={{
+            width:26, height:26, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
+            fontSize:14, flexShrink:0, background:`${p.color}22`, border:`1.5px solid ${p.color}`,
+          }}>{p.avatar}</div>
+          <span style={{ flex:1, fontFamily: D.display, fontWeight:500, fontSize:12, color: T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.username}</span>
+          <span style={{ fontFamily: D.display, fontWeight:700, fontSize:12, color: T.ink }}>{p.roundScore.toLocaleString()}</span>
         </motion.div>
       ))}
     </div>
@@ -57,30 +69,26 @@ function MiniLeaderboard({ gameState }: { gameState: GameState }) {
 // ── Timer Bar ─────────────────────────────────────────────────────────────────
 
 function TimerBar({ timeRemaining, totalTime }: { timeRemaining: number; totalTime: number }) {
-  const pct = Math.max(0, (timeRemaining / totalTime) * 100);
+  const pct      = Math.max(0, (timeRemaining / totalTime) * 100);
   const isUrgent = timeRemaining <= 10;
-
   return (
-    <div className="relative h-3 bg-white/10 rounded-full overflow-hidden">
+    <div style={{ position:'relative', height:8, background:'rgba(20,22,27,0.1)', borderRadius:999, overflow:'hidden' }}>
       <motion.div
-        className="absolute inset-y-0 left-0 rounded-full"
         style={{
+          position:'absolute', inset:'0 auto 0 0', borderRadius:999,
           background: isUrgent
-            ? 'linear-gradient(90deg, #EF4444, #F59E0B)'
-            : 'linear-gradient(90deg, #06B6D4, #7C3AED, #EC4899)',
-          boxShadow: isUrgent
-            ? '0 0 12px rgba(239,68,68,0.6)'
-            : '0 0 12px rgba(124,58,237,0.5)',
+            ? `linear-gradient(90deg, ${T.torch}, ${T.gold})`
+            : `linear-gradient(90deg, ${T.lake}, ${T.grape})`,
+          boxShadow: isUrgent ? `0 0 8px ${T.torch}88` : `0 0 8px ${T.lake}66`,
         }}
-        animate={{ width: `${pct}%` }}
-        transition={{ duration: 0.5, ease: 'linear' }}
+        animate={{ width:`${pct}%` }}
+        transition={{ duration:.5, ease:'linear' }}
       />
       {isUrgent && (
         <motion.div
-          className="absolute inset-0 rounded-full"
-          animate={{ opacity: [0, 0.3, 0] }}
-          transition={{ repeat: Infinity, duration: 0.5 }}
-          style={{ background: 'rgba(239,68,68,0.4)' }}
+          style={{ position:'absolute', inset:0, borderRadius:999, background:`rgba(233,79,29,0.35)` }}
+          animate={{ opacity:[0,.4,0] }}
+          transition={{ repeat:Infinity, duration:.5 }}
         />
       )}
     </div>
@@ -90,69 +98,55 @@ function TimerBar({ timeRemaining, totalTime }: { timeRemaining: number; totalTi
 // ── Game Results Screen ────────────────────────────────────────────────────────
 
 function GameResultsScreen() {
-  const results = useGameStore((s) => s.gameResults);
-  const room = useGameStore((s) => s.room);
+  const results  = useGameStore((s) => s.gameResults);
+  const room     = useGameStore((s) => s.room);
   const playerId = useGameStore((s) => s.playerId);
   if (!results) return null;
 
-  const sorted = [...results.scores].sort((a: PlayerResult, b: PlayerResult) => b.roundScore - a.roundScore);
+  const sorted   = [...results.scores].sort((a: PlayerResult, b: PlayerResult) => b.roundScore - a.roundScore);
   const myResult = results.scores.find((s: PlayerResult) => s.playerId === playerId);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-full py-8 px-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-md"
-      >
-        <h2 className="font-display font-black text-3xl text-white text-center mb-2">
-          Round Over!
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', padding:'24px 16px' }}>
+      <motion.div initial={{ opacity:0, scale:.9 }} animate={{ opacity:1, scale:1 }} style={{ width:'100%', maxWidth:420 }}>
+
+        <h2 style={{ fontFamily: D.display, fontWeight:800, fontSize:36, color: T.ink, textAlign:'center', margin:'0 0 4px', letterSpacing:'-0.035em' }}>
+          Round <em style={{ fontFamily: SERIF, fontStyle:'italic', fontWeight:400, color: T.torch }}>Over!</em>
         </h2>
 
         {results.highlights.length > 0 && (
-          <div className="text-center mb-6">
+          <div style={{ textAlign:'center', marginBottom:16 }}>
             {results.highlights.map((h, i) => (
-              <motion.p
-                key={i}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.15 }}
-                className="text-amber-400 font-bold text-lg"
-              >
-                {h}
-              </motion.p>
+              <motion.p key={i} initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay:i*.12 }}
+                style={{ fontFamily: D.display, fontWeight:700, fontSize:15, color: T.gold, margin:'4px 0' }}>{h}</motion.p>
             ))}
           </div>
         )}
 
-        <div className="glass rounded-2xl p-4 space-y-2 mb-6">
+        <div style={{ background: T.paper, border:`1px solid ${T.line}`, borderRadius:18, padding:14, marginBottom:16, display:'flex', flexDirection:'column', gap:8 }}>
           {sorted.map((s: PlayerResult, idx: number) => {
             const player = room?.players.find((p: Player) => p.id === s.playerId);
-            const isMe = s.playerId === playerId;
+            const isMe   = s.playerId === playerId;
+            const medals = ['🥇','🥈','🥉'];
             return (
-              <motion.div
-                key={s.playerId}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.08 }}
-                className={`flex items-center gap-3 p-3 rounded-xl ${
-                  isMe ? 'bg-brand-purple/20 border border-brand-purple/30' : 'bg-white/5'
-                }`}
-              >
-                <span className="text-xl">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`}</span>
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-base shrink-0"
-                  style={{ background: `${player?.color ?? '#7C3AED'}30`, border: `2px solid ${player?.color ?? '#7C3AED'}` }}
-                >
-                  {player?.avatar ?? '🎮'}
-                </div>
-                <span className="flex-1 font-medium text-white truncate">
+              <motion.div key={s.playerId} initial={{ opacity:0, x:-16 }} animate={{ opacity:1, x:0 }} transition={{ delay:idx*.07 }}
+                style={{
+                  display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:12,
+                  background: isMe ? `${T.torch}0f` : 'rgba(20,22,27,0.03)',
+                  border:`1px solid ${isMe ? `${T.torch}44` : T.line}`,
+                }}>
+                <span style={{ fontSize:18 }}>{medals[idx] ?? `${idx+1}.`}</span>
+                <div style={{
+                  width:32, height:32, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
+                  fontSize:16, flexShrink:0, background:`${player?.color ?? T.grape}22`, border:`2px solid ${player?.color ?? T.grape}`,
+                }}>{player?.avatar ?? '🎮'}</div>
+                <span style={{ flex:1, fontFamily: D.display, fontWeight:600, fontSize:14, color: T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                   {s.username || player?.username}
-                  {isMe && <span className="text-xs text-brand-purple ml-1">(you)</span>}
+                  {isMe && <span style={{ color: T.torch, fontSize:11, marginLeft:6 }}>(you)</span>}
                 </span>
-                <div className="text-right">
-                  <div className="font-display font-bold text-white">+{s.roundScore.toLocaleString()}</div>
-                  <div className="text-xs text-white/40">{s.totalScore.toLocaleString()} total</div>
+                <div style={{ textAlign:'right' }}>
+                  <div style={{ fontFamily: D.display, fontWeight:800, fontSize:15, color: T.ink }}>+{s.roundScore.toLocaleString()}</div>
+                  <div style={{ fontSize:11, color: T.ink3 }}>{s.totalScore.toLocaleString()} total</div>
                 </div>
               </motion.div>
             );
@@ -160,17 +154,13 @@ function GameResultsScreen() {
         </div>
 
         {myResult && myResult.rank === 1 && (
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 300, delay: 0.5 }}
-            className="text-center text-2xl font-display font-black text-amber-400 mb-4"
-          >
+          <motion.div initial={{ scale:0 }} animate={{ scale:1 }} transition={{ type:'spring', stiffness:280, delay:.5 }}
+            style={{ textAlign:'center', fontFamily: D.display, fontWeight:800, fontSize:22, color: T.gold, marginBottom:12 }}>
             🏆 YOU WIN THIS ROUND!
           </motion.div>
         )}
 
-        <p className="text-center text-white/40 text-sm">Next game loading...</p>
+        <p style={{ textAlign:'center', fontFamily:'monospace', fontSize:12, color: T.ink3 }}>Next game loading…</p>
       </motion.div>
     </div>
   );
@@ -179,62 +169,44 @@ function GameResultsScreen() {
 // ── Game Intro Screen ─────────────────────────────────────────────────────────
 
 function GameIntroScreen({ gameState }: { gameState: GameState }) {
-  const gameNames: Record<string, { name: string; emoji: string; desc: string }> = {
-    'mario-race': { name: 'Mario Race!', emoji: '🍄', desc: 'Race to the 🏁 pipe! Stomp Goombas, hit ? blocks, use power-ups. First one in wins!' },
-    'knockback-arena': { name: 'Knockback Arena', emoji: '👊', desc: 'Punch and dash everyone off the platforms. Last one standing wins.' },
-    'shopping-cart-racing': { name: 'Shopping Cart Racing', emoji: '🛒', desc: 'Bumpy downhill race. Grab turbos, dodge trees, reach the flag first!' },
-    'rage-obby': { name: 'Rage Obby', emoji: '😤', desc: 'Jump across platforms, dodge spikes, ride moving ledges. Die → go back to your last checkpoint!' },
-    'floor-is-lava': { name: 'Floor is Lava!', emoji: '🌋', desc: 'The lava is rising! Climb the tower, jump between platforms, and be the last one alive. WASD + Space to move.' },
-    'physics-soccer': { name: 'Physics Soccer', emoji: '⚽', desc: 'Slam the ball into the goal! Chaotic physics, boost dashes, and ridiculous collisions. WASD to move, SHIFT to dash.' },
+  const INFO: Record<string, { name: string; emoji: string; desc: string; color: string }> = {
+    'mario-race':           { name:'Mario Race',           emoji:'🍄', color: T.torch,  desc:'Race to the 🏁 pipe! Stomp Goombas, hit ? blocks, use power-ups. First one in wins!' },
+    'knockback-arena':      { name:'Knockback Arena',      emoji:'👊', color: T.grape,  desc:'Punch and dash everyone off the platforms. Last one standing wins.' },
+    'shopping-cart-racing': { name:'Shopping Cart Racing', emoji:'🛒', color: T.gold,   desc:'Drift down park roads, knock rivals off course, reach the finish line!' },
+    'rage-obby':            { name:'Rage Obby',            emoji:'😤', color: T.leaf,   desc:'Jump across platforms, dodge spikes, ride moving ledges. Die → last checkpoint!' },
+    'floor-is-lava':        { name:'Floor is Lava',        emoji:'🌋', color:'#B91C1C', desc:'The lava is rising! Climb the tower, swing your bat, be the last one alive.' },
+    'physics-soccer':       { name:'Physics Soccer',       emoji:'⚽', color: T.lake,   desc:'Slam the ball into the goal. Chaotic physics, boost dashes, ridiculous collisions.' },
   };
 
-  const info = gameNames[gameState.type] ?? { name: gameState.type, emoji: '🎮', desc: 'Get ready!' };
+  const info = INFO[gameState.type] ?? { name: gameState.type, emoji:'🎮', color: T.torch, desc:'Get ready!' };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-full px-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.5 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ type: 'spring', stiffness: 200, damping: 15 }}
-        className="text-center"
-      >
-        <motion.div
-          animate={{ rotate: [0, -10, 10, -10, 0] }}
-          transition={{ delay: 0.5, duration: 0.5 }}
-          className="text-8xl mb-6"
-        >
-          {info.emoji}
-        </motion.div>
-        <motion.h2
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="font-display font-black text-4xl sm:text-5xl text-white mb-3"
-        >
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', padding:24 }}>
+      <motion.div initial={{ opacity:0, scale:.6 }} animate={{ opacity:1, scale:1 }}
+        transition={{ type:'spring', stiffness:200, damping:15 }}
+        style={{ textAlign:'center', maxWidth:480 }}>
+
+        <motion.div animate={{ rotate:[0,-10,10,-10,0] }} transition={{ delay:.5, duration:.5 }}
+          style={{ fontSize:80, marginBottom:20, display:'block' }}>{info.emoji}</motion.div>
+
+        <motion.h2 initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:.2 }}
+          style={{ fontFamily: D.display, fontWeight:800, fontSize:'clamp(32px,7vw,56px)', color: T.paper, margin:'0 0 12px', letterSpacing:'-0.04em', lineHeight:.95 }}>
           {info.name}
         </motion.h2>
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 }}
-          className="text-white/60 text-xl mb-6"
-        >
+
+        <motion.p initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:.35 }}
+          style={{ fontFamily: D.display, fontSize:16, color:'rgba(251,247,238,0.65)', marginBottom:20, lineHeight:1.5 }}>
           {info.desc}
         </motion.p>
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.6 }}
-          className="text-white/40 text-sm"
-        >
+
+        <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:.5 }}
+          style={{ fontFamily:'monospace', fontSize:12, color:'rgba(251,247,238,0.4)', marginBottom:16 }}>
           Game {gameState.gameNumber} of {gameState.totalGames}
         </motion.div>
-        <motion.div
-          animate={{ opacity: [0.5, 1, 0.5] }}
-          transition={{ repeat: Infinity, duration: 1 }}
-          className="mt-8 text-white/50 text-lg font-display"
-        >
-          Get ready...
+
+        <motion.div animate={{ opacity:[.5,1,.5] }} transition={{ repeat:Infinity, duration:1 }}
+          style={{ fontFamily: D.display, fontWeight:700, fontSize:18, color: info.color }}>
+          Get ready…
         </motion.div>
       </motion.div>
     </div>
@@ -244,93 +216,97 @@ function GameIntroScreen({ gameState }: { gameState: GameState }) {
 // ── Main Game Screen ──────────────────────────────────────────────────────────
 
 export default function GameScreen() {
-  const gameState = useGameState();
+  const gameState   = useGameState();
   const gameResults = useGameStore((s) => s.gameResults);
   const activeChaos = useActiveChaos();
   const { leaveRoom } = useSocketActions();
 
+  void leaveRoom; // available if needed
+
   if (!gameState) return null;
 
-  const totalTime = 60; // default; games set their own
+  const isPlaying  = gameState.phase === 'playing';
+  const isIntro    = gameState.phase === 'intro';
+  const isResults  = gameState.phase === 'results';
+  const totalTime  = 60;
 
   return (
-    <div className={`min-h-screen bg-game-bg relative overflow-hidden ${
-      activeChaos?.type === 'SCREEN_SHAKE' ? 'chaos-shake' : ''
-    }`}>
-      {/* Chaos visual effects */}
+    <div style={{ minHeight:'100vh', background:'#14161B', position:'relative', overflowX:'hidden' }}
+      className={activeChaos?.type === 'SCREEN_SHAKE' ? 'chaos-shake' : ''}>
+      <style>{`
+        .gs-panel { background: rgba(251,247,238,0.96); border: 1px solid rgba(20,22,27,0.14); backdrop-filter: blur(8px); }
+      `}</style>
+
       <ChaosAnnouncement />
       <ChaosFlash />
       <DiscoFilter />
 
-      {/* BG */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-64 opacity-10"
-          style={{ background: 'radial-gradient(ellipse, #7C3AED 0%, transparent 70%)' }} />
-      </div>
+      {/* Top HUD bar */}
+      <div className="gs-panel" style={{ position:'relative', zIndex:20, borderRadius:0, borderLeft:'none', borderRight:'none', borderTop:'none', padding:'10px 16px' }}>
+        <div style={{ maxWidth:1100, margin:'0 auto', display:'flex', alignItems:'center', gap:12 }}>
+          {/* Timer number */}
+          <div style={{
+            fontFamily: D.display, fontWeight:800, fontSize:32, lineHeight:1,
+            color: gameState.timeRemaining <= 10 ? T.torch : T.ink,
+            letterSpacing:'-0.04em', minWidth:'2ch', textAlign:'center', tabularNums: true,
+          } as React.CSSProperties}>
+            {gameState.timeRemaining}
+          </div>
 
-      {/* Top HUD */}
-      <div className="relative z-10 px-4 pt-4 pb-2">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex items-center gap-4 mb-2">
-            {/* Timer */}
-            <div className="font-display font-black text-3xl text-white tabular-nums min-w-[3ch] text-center"
-              style={{ color: gameState.timeRemaining <= 10 ? '#EF4444' : 'white' }}>
-              {gameState.timeRemaining}
-            </div>
-            {/* Timer bar */}
-            <div className="flex-1">
-              <TimerBar
-                timeRemaining={gameState.timeRemaining}
-                totalTime={totalTime}
-              />
-            </div>
-            {/* Game info */}
-            <div className="text-right">
-              <div className="text-white/50 text-xs">Game {gameState.gameNumber}/{gameState.totalGames}</div>
+          {/* Timer bar */}
+          <div style={{ flex:1 }}>
+            <TimerBar timeRemaining={gameState.timeRemaining} totalTime={totalTime} />
+          </div>
+
+          {/* Game counter */}
+          <div style={{ textAlign:'right' }}>
+            <div style={{ fontFamily:'monospace', fontSize:11, color: T.ink3, textTransform:'uppercase', letterSpacing:'0.1em' }}>
+              Game {gameState.gameNumber}/{gameState.totalGames}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main content */}
-      <div className="relative z-10 max-w-5xl mx-auto px-4 pb-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          {/* Game area */}
-          <div className="lg:col-span-3">
-            <AnimatePresence mode="wait">
-              {gameResults && gameState.phase === 'results' ? (
-                <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  <GameResultsScreen />
-                </motion.div>
-              ) : gameState.phase === 'intro' ? (
-                <motion.div key="intro" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  <GameIntroScreen gameState={gameState} />
-                </motion.div>
-              ) : (
-                <motion.div key={`game-${gameState.type}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  {gameState.type === 'mario-race' && <MarioGame />}
-                  {gameState.type === 'knockback-arena' && <KnockbackArena />}
-                  {gameState.type === 'shopping-cart-racing' && <ShoppingCart />}
-                  {gameState.type === 'rage-obby' && <RageObby />}
-                  {gameState.type === 'floor-is-lava' && <FloorIsLava />}
-                  {gameState.type === 'physics-soccer' && <PhysicsSoccer />}
-                  {!['mario-race', 'knockback-arena', 'shopping-cart-racing', 'rage-obby', 'floor-is-lava', 'physics-soccer'].includes(gameState.type) && (
-                    <div className="flex items-center justify-center h-64 text-white/50 text-xl">
-                      Coming soon: {gameState.type} 🚧
-                    </div>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+      {/* Main layout */}
+      <div style={{ maxWidth:1100, margin:'0 auto', padding:'12px 16px 16px', display:'grid', gridTemplateColumns:'1fr', gap:12 }} className="gs-layout">
+        <style>{`@media(min-width:900px){.gs-layout{grid-template-columns:1fr 220px !important;}}`}</style>
 
-          {/* Sidebar: leaderboard */}
-          <div className="lg:col-span-1">
-            <div className="glass rounded-2xl p-3 sticky top-4">
-              <p className="text-white/40 text-xs uppercase tracking-wider mb-3 font-mono">Scores</p>
-              <MiniLeaderboard gameState={gameState} />
-            </div>
-          </div>
+        {/* Game area */}
+        <div>
+          <AnimatePresence mode="wait">
+            {isResults && gameResults ? (
+              <motion.div key="results" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+                style={{ background: T.bg, borderRadius:18, overflow:'hidden' }}>
+                <GameResultsScreen />
+              </motion.div>
+            ) : isIntro ? (
+              <motion.div key="intro" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+                style={{ borderRadius:18, overflow:'hidden', background:'#14161B', minHeight:400 }}>
+                <GameIntroScreen gameState={gameState} />
+              </motion.div>
+            ) : (
+              <motion.div key={`game-${gameState.type}`} initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+                style={{ borderRadius:18, overflow:'hidden' }}>
+                {gameState.type === 'mario-race'           && <MarioGame />}
+                {gameState.type === 'knockback-arena'      && <KnockbackArena />}
+                {gameState.type === 'shopping-cart-racing' && <ShoppingCart />}
+                {gameState.type === 'rage-obby'            && <RageObby />}
+                {gameState.type === 'floor-is-lava'        && <FloorIsLava />}
+                {gameState.type === 'physics-soccer'       && <PhysicsSoccer />}
+                {!['mario-race','knockback-arena','shopping-cart-racing','rage-obby','floor-is-lava','physics-soccer'].includes(gameState.type) && (
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:240, color:'rgba(251,247,238,0.4)', fontFamily: D.display, fontSize:18 }}>
+                    Coming soon: {gameState.type} 🚧
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Sidebar leaderboard */}
+        <div className="gs-panel" style={{ borderRadius:16, padding:14, alignSelf:'start', position:'sticky', top:8 }}>
+          <p style={{ fontFamily:'monospace', fontSize:10, color: T.ink3, textTransform:'uppercase', letterSpacing:'0.16em', marginBottom:10 }}>Scores</p>
+          <MiniLeaderboard gameState={gameState} />
         </div>
       </div>
 

@@ -7,79 +7,90 @@ import { useSocketActions, getSocket } from '@/hooks/useSocket';
 import { Player, ChatMessage, GameType } from '@/types';
 import ToastContainer from '@/components/ui/ToastContainer';
 
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const T = {
+  bg:      '#F4EEE2',
+  bg2:     '#EDE5D2',
+  paper:   '#FBF7EE',
+  ink:     '#14161B',
+  ink2:    '#2A2D36',
+  ink3:    '#5A5F6C',
+  line:    'rgba(20,22,27,0.12)',
+  lineStr: 'rgba(20,22,27,0.22)',
+  torch:   '#E94F1D',
+  lake:    '#1F5BD8',
+  gold:    '#F4B400',
+  leaf:    '#1E5A3A',
+  grape:   '#5E37B7',
+};
+
+const D = { display: "'Bricolage Grotesque',system-ui,sans-serif" as const };
+const SERIF = "'Instrument Serif',Georgia,serif" as const;
+
 // ── Game metadata ─────────────────────────────────────────────────────────────
 
 const ALL_GAMES: { type: GameType; emoji: string; name: string }[] = [
   { type: 'mario-race',           emoji: '🍄', name: 'Mario Race' },
   { type: 'knockback-arena',      emoji: '👊', name: 'Knockback Arena' },
-  { type: 'shopping-cart-racing', emoji: '🛒', name: 'Shopping Cart' },
+  { type: 'shopping-cart-racing', emoji: '🛒', name: 'Shopping Cart Racing' },
   { type: 'rage-obby',            emoji: '😤', name: 'Rage Obby' },
   { type: 'floor-is-lava',        emoji: '🌋', name: 'Floor is Lava' },
   { type: 'physics-soccer',       emoji: '⚽', name: 'Physics Soccer' },
 ];
 
 function gameLabel(type: GameType): string {
-  return ALL_GAMES.find(g => g.type === type)?.emoji + ' ' + (ALL_GAMES.find(g => g.type === type)?.name ?? type);
+  const g = ALL_GAMES.find(g => g.type === type);
+  return g ? `${g.emoji} ${g.name}` : type;
 }
 
 function randomPlaylist(count: number): GameType[] {
-  const shuffled = [...ALL_GAMES].sort(() => Math.random() - 0.5).map(g => g.type);
-  return shuffled.slice(0, Math.min(count, ALL_GAMES.length));
+  return [...ALL_GAMES].sort(() => Math.random() - 0.5).map(g => g.type).slice(0, Math.min(count, 6));
 }
 
-// ── Game Picker (host only) ───────────────────────────────────────────────────
+// ── Game Picker ───────────────────────────────────────────────────────────────
 
 function GamePicker({ playlist, isHost }: { playlist: GameType[]; isHost: boolean }) {
   const [mode, setMode] = useState<'random' | 'custom'>('random');
   const [randomCount, setRandomCount] = useState(playlist.length || 3);
   const [selected, setSelected] = useState<GameType[]>(playlist);
 
-  // sync when room playlist changes externally
-  useEffect(() => { setSelected(playlist); }, [playlist.join(',')]); // eslint-disable-line
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setSelected(playlist); }, [playlist.join(',')]);
 
-  function emitPlaylist(pl: GameType[]) {
+  function emit(pl: GameType[]) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (getSocket() as any).emit('lobby:set_playlist', pl);
   }
 
-  function handleRandomCount(n: number) {
-    setRandomCount(n);
-    emitPlaylist(randomPlaylist(n));
-  }
-
-  function handleRandomReroll() {
-    emitPlaylist(randomPlaylist(randomCount));
-  }
+  function handleRandomCount(n: number) { setRandomCount(n); emit(randomPlaylist(n)); }
+  function handleReroll() { emit(randomPlaylist(randomCount)); }
 
   function toggleGame(type: GameType) {
     let next: GameType[];
     if (selected.includes(type)) {
-      if (selected.length <= 1) return; // must have at least 1
+      if (selected.length <= 1) return;
       next = selected.filter(g => g !== type);
     } else {
       if (selected.length >= 6) return;
       next = [...selected, type];
     }
     setSelected(next);
-    emitPlaylist(next);
+    emit(next);
   }
 
   function switchMode(m: 'random' | 'custom') {
     setMode(m);
-    if (m === 'random') {
-      emitPlaylist(randomPlaylist(randomCount));
-    } else {
-      setSelected(playlist.length ? playlist : [ALL_GAMES[0].type]);
-    }
+    if (m === 'random') emit(randomPlaylist(randomCount));
+    else setSelected(playlist.length ? playlist : [ALL_GAMES[0].type]);
   }
 
   if (!isHost) {
     return (
-      <div className="space-y-1.5">
+      <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
         {playlist.map((game, idx) => (
-          <div key={idx} className="flex items-center gap-2 text-sm">
-            <span className="text-white/30 font-mono text-xs w-4">{idx + 1}.</span>
-            <span className="text-white/70">{gameLabel(game)}</span>
+          <div key={idx} style={{ display:'flex', alignItems:'center', gap:8, fontSize:14, color: T.ink2 }}>
+            <span style={{ fontFamily:'monospace', fontSize:11, color: T.ink3, width:16 }}>{idx + 1}.</span>
+            {gameLabel(game)}
           </div>
         ))}
       </div>
@@ -87,86 +98,78 @@ function GamePicker({ playlist, isHost }: { playlist: GameType[]; isHost: boolea
   }
 
   return (
-    <div className="space-y-3">
+    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
       {/* Mode toggle */}
-      <div className="flex gap-1 p-0.5 rounded-xl bg-white/5">
-        {(['random', 'custom'] as const).map(m => (
-          <button
-            key={m}
-            onClick={() => switchMode(m)}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all capitalize ${
-              mode === m ? 'bg-brand-purple text-white' : 'text-white/50 hover:text-white'
-            }`}
-          >
+      <div style={{ display:'flex', gap:4, padding:3, borderRadius:12, background: T.bg2 }}>
+        {(['random','custom'] as const).map(m => (
+          <button key={m} onClick={() => switchMode(m)} style={{
+            flex:1, padding:'7px 0', borderRadius:9, border:'none', cursor:'pointer',
+            fontFamily: D.display, fontWeight:600, fontSize:12,
+            background: mode === m ? T.ink : 'transparent',
+            color: mode === m ? T.bg : T.ink3,
+            transition: 'all .15s',
+          }}>
             {m === 'random' ? '🎲 Random' : '✏️ Custom'}
           </button>
         ))}
       </div>
 
       {mode === 'random' ? (
-        <div className="space-y-2">
-          <p className="text-white/40 text-xs">How many games?</p>
-          <div className="flex gap-1">
-            {[1, 2, 3, 4, 5, 6].map(n => (
-              <button
-                key={n}
-                onClick={() => handleRandomCount(n)}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  randomCount === n
-                    ? 'bg-brand-purple text-white'
-                    : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                {n}
-              </button>
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          <p style={{ margin:0, fontSize:12, color: T.ink3 }}>How many games?</p>
+          <div style={{ display:'flex', gap:4 }}>
+            {[1,2,3,4,5,6].map(n => (
+              <button key={n} onClick={() => handleRandomCount(n)} style={{
+                flex:1, padding:'7px 0', borderRadius:8, border:`1px solid ${randomCount === n ? T.torch : T.line}`,
+                background: randomCount === n ? T.torch : T.bg2,
+                color: randomCount === n ? T.paper : T.ink2,
+                fontFamily: D.display, fontWeight:700, fontSize:13, cursor:'pointer',
+              }}>{n}</button>
             ))}
           </div>
-          <button
-            onClick={handleRandomReroll}
-            className="w-full py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white bg-white/5 hover:bg-white/10 transition-all"
-          >
-            🔀 Re-roll
-          </button>
+          <button onClick={handleReroll} style={{
+            width:'100%', padding:'8px', borderRadius:8, border:`1px solid ${T.line}`,
+            background: T.bg2, color: T.ink2, fontFamily: D.display, fontWeight:600, fontSize:12, cursor:'pointer',
+          }}>🔀 Re-roll</button>
         </div>
       ) : (
-        <div className="space-y-1.5">
-          <p className="text-white/40 text-xs">Pick 1–6 games (in order):</p>
-          <div className="grid grid-cols-2 gap-1.5">
+        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+          <p style={{ margin:0, fontSize:12, color: T.ink3 }}>Pick 1–6 games (in order):</p>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
             {ALL_GAMES.map(g => {
               const on = selected.includes(g.type);
               const idx = selected.indexOf(g.type);
               return (
-                <button
-                  key={g.type}
-                  onClick={() => toggleGame(g.type)}
-                  className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-xs font-bold transition-all text-left ${
-                    on
-                      ? 'bg-brand-purple/30 border border-brand-purple/60 text-white'
-                      : 'bg-white/5 border border-white/10 text-white/40 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  <span className="text-base">{g.emoji}</span>
-                  <span className="flex-1 leading-tight">{g.name}</span>
+                <button key={g.type} onClick={() => toggleGame(g.type)} style={{
+                  display:'flex', alignItems:'center', gap:6, padding:'8px 10px',
+                  borderRadius:10, border:`1.5px solid ${on ? T.torch : T.line}`,
+                  background: on ? `${T.torch}12` : T.bg2,
+                  color: on ? T.ink : T.ink3, cursor:'pointer',
+                  fontFamily: D.display, fontWeight:600, fontSize:12, textAlign:'left',
+                }}>
+                  <span style={{ fontSize:16 }}>{g.emoji}</span>
+                  <span style={{ flex:1, lineHeight:1.2 }}>{g.name}</span>
                   {on && (
-                    <span className="w-4 h-4 rounded-full bg-brand-purple flex items-center justify-center text-[9px] font-black shrink-0">
-                      {idx + 1}
-                    </span>
+                    <span style={{
+                      width:18, height:18, borderRadius:'50%', background: T.torch,
+                      color: T.paper, display:'flex', alignItems:'center', justifyContent:'center',
+                      fontSize:9, fontWeight:900, flexShrink:0,
+                    }}>{idx + 1}</span>
                   )}
                 </button>
               );
             })}
           </div>
-          {selected.length === 0 && <p className="text-red-400 text-xs">Select at least 1 game</p>}
         </div>
       )}
 
-      {/* Current playlist preview */}
-      <div className="pt-1 border-t border-white/10">
-        <p className="text-white/30 text-xs mb-1">Playlist preview:</p>
-        <div className="flex flex-wrap gap-1">
+      {/* Playlist preview */}
+      <div style={{ paddingTop:8, borderTop:`1px solid ${T.line}` }}>
+        <p style={{ margin:'0 0 6px', fontSize:11, color: T.ink3, fontFamily:'monospace', textTransform:'uppercase', letterSpacing:'0.1em' }}>Playlist:</p>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
           {playlist.map((g, i) => (
-            <span key={i} className="text-xs bg-white/10 rounded-lg px-2 py-0.5 text-white/60">
-              {i + 1}. {gameLabel(g)}
+            <span key={i} style={{ fontSize:11, background: T.bg2, borderRadius:6, padding:'3px 8px', color: T.ink2 }}>
+              {i+1}. {gameLabel(g)}
             </span>
           ))}
         </div>
@@ -175,25 +178,22 @@ function GamePicker({ playlist, isHost }: { playlist: GameType[]; isHost: boolea
   );
 }
 
-// ── QR Code Component (lazy) ──────────────────────────────────────────────────
+// ── QR Code ───────────────────────────────────────────────────────────────────
 
 function QRCode({ code }: { code: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
   useEffect(() => {
     const url = `${window.location.origin}?join=${code}`;
     import('qrcode').then((QR) => {
       if (canvasRef.current) {
         QR.toCanvas(canvasRef.current, url, {
-          width: 140,
-          margin: 1,
-          color: { dark: '#ffffff', light: '#0f0f23' },
+          width: 132, margin: 1,
+          color: { dark: '#14161B', light: '#FBF7EE' },
         });
       }
     });
   }, [code]);
-
-  return <canvas ref={canvasRef} className="rounded-xl" />;
+  return <canvas ref={canvasRef} style={{ borderRadius:10 }} />;
 }
 
 // ── Player Card ───────────────────────────────────────────────────────────────
@@ -209,62 +209,56 @@ function PlayerCard({ player, isMe, isHost: viewerIsHost }: { player: Player; is
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, scale: 0.8 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.8 }}
-      className="flex items-center gap-3 p-3 rounded-xl transition-all group"
+      initial={{ opacity:0, scale:.9 }}
+      animate={{ opacity:1, scale:1 }}
+      exit={{ opacity:0, scale:.9 }}
+      className="group"
       style={{
-        background: isMe ? 'rgba(124,58,237,0.15)' : 'rgba(255,255,255,0.03)',
-        border: `1px solid ${isMe ? 'rgba(124,58,237,0.4)' : 'rgba(255,255,255,0.06)'}`,
+        display:'flex', alignItems:'center', gap:12, padding:'12px 14px',
+        borderRadius:14,
+        background: isMe ? `${T.torch}0f` : T.bg2,
+        border:`1px solid ${isMe ? `${T.torch}44` : T.line}`,
       }}
     >
-      {/* Avatar */}
-      <div
-        className="w-10 h-10 rounded-full flex items-center justify-center text-xl shrink-0 relative"
-        style={{
-          background: `${player.color}25`,
-          border: `2px solid ${player.color}`,
-          boxShadow: player.ready ? `0 0 12px ${player.color}60` : 'none',
-        }}
-      >
+      <div style={{
+        width:40, height:40, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
+        fontSize:20, flexShrink:0, position:'relative',
+        background:`${player.color}22`, border:`2px solid ${player.color}`,
+        boxShadow: player.ready ? `0 0 10px ${player.color}60` : 'none',
+      }}>
         {player.avatar}
-        {player.isHost && (
-          <div className="absolute -top-1 -right-1 text-xs">👑</div>
-        )}
+        {player.isHost && <div style={{ position:'absolute', top:-4, right:-4, fontSize:12 }}>👑</div>}
       </div>
 
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="font-display font-semibold text-white text-sm truncate">
-            {player.username}
-          </span>
-          {isMe && <span className="text-xs text-brand-purple font-mono">(you)</span>}
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <span style={{ fontFamily: D.display, fontWeight:600, fontSize:14, color: T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{player.username}</span>
+          {isMe && <span style={{ fontSize:11, color: T.torch, fontFamily:'monospace' }}>(you)</span>}
         </div>
-        <div className="text-xs text-white/40 mt-0.5">
+        <div style={{ fontSize:12, color: T.ink3, marginTop:2 }}>
           {!player.isConnected ? '🔴 Reconnecting...' : player.ready ? '✅ Ready' : '⏳ Waiting...'}
         </div>
       </div>
 
-      {/* Ready badge */}
-      <div className={`text-xs font-bold px-2 py-1 rounded-lg ${player.ready ? 'bg-green-500/20 text-green-400' : 'bg-white/5 text-white/30'}`}>
-        {player.ready ? 'READY' : 'NOT READY'}
-      </div>
+      <span style={{
+        fontSize:11, fontWeight:700, fontFamily: D.display, padding:'4px 9px', borderRadius:7,
+        background: player.ready ? `${T.leaf}18` : T.bg,
+        color: player.ready ? T.leaf : T.ink3,
+        border:`1px solid ${player.ready ? `${T.leaf}44` : T.line}`,
+      }}>
+        {player.ready ? 'READY' : 'WAITING'}
+      </span>
 
-      {/* Host: kick button */}
       {viewerIsHost && !isMe && !player.isHost && (
-        <button
-          onClick={kickPlayer}
-          className="opacity-0 group-hover:opacity-100 text-xs text-red-400 hover:text-red-300 transition-all px-2 py-1 rounded-lg hover:bg-red-500/10"
-        >
-          Kick
-        </button>
+        <button onClick={kickPlayer} className="group-hover:opacity-100" style={{
+          opacity:0, fontSize:12, color:'#B91C1C', background:'none', border:'none', cursor:'pointer', padding:'4px 8px', borderRadius:6, transition:'opacity .15s',
+        }}>Kick</button>
       )}
     </motion.div>
   );
 }
 
-// ── Chat Panel ────────────────────────────────────────────────────────────────
+// ── Chat ──────────────────────────────────────────────────────────────────────
 
 function ChatPanel() {
   const messages = useGameStore((s) => s.chatMessages);
@@ -272,79 +266,64 @@ function ChatPanel() {
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }); }, [messages]);
 
   function handleSend(e: React.FormEvent) {
     e.preventDefault();
-    const trimmed = input.trim();
-    if (!trimmed) return;
-    sendChat(trimmed);
-    setInput('');
+    const t = input.trim();
+    if (!t) return;
+    sendChat(t); setInput('');
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto space-y-2 pr-1" style={{ maxHeight: '280px' }}>
+    <div style={{ display:'flex', flexDirection:'column', height:'100%' }}>
+      <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:8, maxHeight:260 }}>
         <AnimatePresence initial={false}>
-          {messages.map((msg) => (
-            <ChatBubble key={msg.id} msg={msg} />
-          ))}
+          {messages.map((msg) => <ChatBubble key={msg.id} msg={msg} />)}
         </AnimatePresence>
         <div ref={bottomRef} />
       </div>
-
-      <form onSubmit={handleSend} className="flex gap-2 mt-3">
+      <form onSubmit={handleSend} style={{ display:'flex', gap:8, marginTop:12 }}>
         <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Say something..."
-          maxLength={200}
-          className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm placeholder-white/30 focus:outline-none focus:border-brand-purple transition-colors"
+          value={input} onChange={e => setInput(e.target.value)}
+          placeholder="Say something..." maxLength={200}
+          style={{
+            flex:1, background: T.bg, border:`1.5px solid ${T.line}`, borderRadius:10,
+            padding:'9px 12px', color: T.ink, fontFamily:'inherit', fontSize:14,
+            outline:'none',
+          }}
+          onFocus={e => (e.target.style.borderColor = T.torch)}
+          onBlur={e => (e.target.style.borderColor = T.line)}
         />
-        <button
-          type="submit"
-          className="px-4 py-2 rounded-xl font-bold text-sm text-white transition-all hover:scale-105 active:scale-95"
-          style={{ background: 'linear-gradient(135deg, #7C3AED, #EC4899)' }}
-        >
-          Send
-        </button>
+        <button type="submit" style={{
+          padding:'9px 16px', borderRadius:10, border:'none', cursor:'pointer',
+          background: T.torch, color: T.paper, fontFamily: D.display, fontWeight:700, fontSize:13,
+        }}>Send</button>
       </form>
     </div>
   );
 }
 
 function ChatBubble({ msg }: { msg: ChatMessage }) {
-  const isSystem = msg.type === 'system';
-
-  if (isSystem) {
+  if (msg.type === 'system') {
     return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="text-center text-xs text-white/40 py-0.5"
-      >
+      <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
+        style={{ textAlign:'center', fontSize:12, color: T.ink3, padding:'2px 0' }}>
         {msg.message}
       </motion.div>
     );
   }
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 5 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex items-start gap-2"
-    >
-      <div
-        className="w-6 h-6 rounded-full flex items-center justify-center text-sm shrink-0 mt-0.5"
-        style={{ background: `${msg.color}30`, border: `1px solid ${msg.color}60` }}
-      >
-        {msg.avatar}
-      </div>
-      <div className="flex-1 min-w-0">
-        <span className="text-xs font-bold" style={{ color: msg.color }}>{msg.username}: </span>
-        <span className="text-sm text-white/80 break-words">{msg.message}</span>
+    <motion.div initial={{ opacity:0, y:4 }} animate={{ opacity:1, y:0 }}
+      style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
+      <div style={{
+        width:24, height:24, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
+        fontSize:13, flexShrink:0, marginTop:1,
+        background:`${msg.color}22`, border:`1px solid ${msg.color}66`,
+      }}>{msg.avatar}</div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <span style={{ fontSize:11, fontWeight:700, color: msg.color }}>{msg.username}: </span>
+        <span style={{ fontSize:13, color: T.ink2, wordBreak:'break-word' }}>{msg.message}</span>
       </div>
     </motion.div>
   );
@@ -353,20 +332,22 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
 // ── Main Lobby ────────────────────────────────────────────────────────────────
 
 export default function LobbyRoom() {
-  const room = useGameStore((s) => s.room);
-  const playerId = useGameStore((s) => s.playerId);
-  const countdown = useGameStore((s) => s.gameCountdown);
+  const room       = useGameStore((s) => s.room);
+  const playerId   = useGameStore((s) => s.playerId);
+  const countdown  = useGameStore((s) => s.gameCountdown);
   const { setReady, startGame, leaveRoom } = useSocketActions();
   const [copied, setCopied] = useState(false);
-  const [tab, setTab] = useState<'players' | 'chat'>('players');
+  const [tab, setTab]       = useState<'players' | 'chat'>('players');
 
   if (!room) return null;
 
-  const me = room.players.find((p) => p.id === playerId);
-  const isHost = me?.isHost ?? false;
-  const connectedPlayers = room.players.filter((p) => p.isConnected);
-  const allReady = connectedPlayers.every((p) => p.ready || p.isHost);
-  const readyCount = connectedPlayers.filter((p) => p.ready).length;
+  const me               = room.players.find((p) => p.id === playerId);
+  const isHost           = me?.isHost ?? false;
+  const connected        = room.players.filter((p) => p.isConnected);
+  const allReady         = connected.every((p) => p.ready || p.isHost);
+  const readyCount       = connected.filter((p) => p.ready).length;
+  const nonHostCount     = connected.length - (isHost ? 1 : 0);
+  const readyPct         = nonHostCount > 0 ? (readyCount / nonHostCount) * 100 : 0;
 
   function copyCode() {
     navigator.clipboard.writeText(room!.code);
@@ -375,35 +356,34 @@ export default function LobbyRoom() {
   }
 
   return (
-    <div className="min-h-screen bg-game-bg relative overflow-hidden">
-      {/* BG Glow */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-96 opacity-20 rounded-full"
-          style={{ background: 'radial-gradient(circle, #7C3AED 0%, transparent 70%)' }} />
-      </div>
+    <div style={{ minHeight:'100vh', background: T.bg, overflowX:'hidden' }}>
+      <style>{`
+        .lobby-btn { transition: transform .15s ease, background .15s ease; }
+        .lobby-btn:hover { transform: translateY(-1px); }
+        .lobby-btn:active { transform: scale(.97); }
+      `}</style>
 
       {/* Countdown overlay */}
       <AnimatePresence>
         {countdown !== null && (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+            style={{
+              position:'fixed', inset:0, zIndex:50,
+              background:'rgba(20,22,27,0.75)', backdropFilter:'blur(6px)',
+              display:'flex', alignItems:'center', justifyContent:'center',
+            }}
           >
             <motion.div
               key={countdown}
-              initial={{ scale: 2, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.5, opacity: 0 }}
-              transition={{ duration: 0.8 }}
-              className="font-display font-black text-[12rem] leading-none"
+              initial={{ scale:2, opacity:0 }}
+              animate={{ scale:1, opacity:1 }}
+              exit={{ scale:.5, opacity:0 }}
+              transition={{ duration:.7 }}
               style={{
-                background: 'linear-gradient(135deg, #F59E0B, #EC4899)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                textShadow: 'none',
-                filter: 'drop-shadow(0 0 40px rgba(245,158,11,0.8))',
+                fontFamily: D.display, fontWeight:800, fontSize:'14rem', lineHeight:1,
+                color: T.torch, letterSpacing:'-0.06em',
+                filter:`drop-shadow(0 0 40px ${T.torch}bb)`,
               }}
             >
               {countdown}
@@ -412,118 +392,110 @@ export default function LobbyRoom() {
         )}
       </AnimatePresence>
 
-      <div className="relative z-10 max-w-5xl mx-auto px-4 py-6">
+      <div style={{ maxWidth:1100, margin:'0 auto', padding:'28px 24px' }}>
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-            <div className="text-white/50 text-sm mb-1">🏆 Internet Olympics</div>
-            <h1 className="font-display font-black text-3xl text-white">Game Lobby</h1>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:28 }}>
+          <motion.div initial={{ opacity:0, x:-16 }} animate={{ opacity:1, x:0 }}>
+            {/* Wordmark */}
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+              <span style={{ display:'inline-block', width:22, height:16, position:'relative', flexShrink:0 }}>
+                <span style={{ position:'absolute', width:11, height:11, borderRadius:'50%', border:`2px solid ${T.torch}`, left:0, top:0 }} />
+                <span style={{ position:'absolute', width:11, height:11, borderRadius:'50%', border:`2px solid ${T.ink}`, left:5, top:4 }} />
+                <span style={{ position:'absolute', width:11, height:11, borderRadius:'50%', border:`2px solid ${T.lake}`, left:10, top:0 }} />
+              </span>
+              <span style={{ fontFamily: D.display, fontWeight:600, fontSize:14, color: T.ink3, letterSpacing:'-0.01em' }}>Internet Olympics</span>
+            </div>
+            <h1 style={{ fontFamily: D.display, fontWeight:800, fontSize:'clamp(28px,4vw,42px)', color: T.ink, margin:0, letterSpacing:'-0.035em', lineHeight:1 }}>
+              Game <em style={{ fontFamily: SERIF, fontStyle:'italic', fontWeight:400, color: T.torch }}>Lobby</em>
+            </h1>
           </motion.div>
-          <button
-            onClick={leaveRoom}
-            className="text-white/40 hover:text-white text-sm transition-colors px-3 py-2 rounded-xl hover:bg-white/10"
-          >
-            Leave →
-          </button>
+          <button onClick={leaveRoom} className="lobby-btn" style={{
+            background:'none', border:`1px solid ${T.lineStr}`, borderRadius:999,
+            color: T.ink2, fontFamily: D.display, fontWeight:600, fontSize:13,
+            padding:'8px 16px', cursor:'pointer',
+          }}>Leave →</button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Left: Room Info */}
-          <div className="lg:col-span-1 space-y-4">
+        <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:16 }} className="lobby-grid">
+          <style>{`@media(min-width:900px){.lobby-grid{grid-template-columns:300px 1fr !important;}}`}</style>
+
+          {/* ── Left column ── */}
+          <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+
             {/* Room Code */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="glass rounded-2xl p-5"
-              style={{ border: '1px solid rgba(124,58,237,0.3)' }}
-            >
-              <p className="text-white/50 text-xs uppercase tracking-wider mb-2 font-mono">Room Code</p>
-              <button
-                onClick={copyCode}
-                className="w-full font-mono font-black text-4xl tracking-[0.2em] text-white hover:text-brand-purple-light transition-colors text-center py-2"
+            <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }}
+              style={{ background: T.paper, border:`1px solid ${T.lineStr}`, borderRadius:20, padding:20 }}>
+              <p style={{ margin:'0 0 6px', fontFamily:'monospace', fontSize:11, color: T.ink3, textTransform:'uppercase', letterSpacing:'0.16em' }}>Room Code</p>
+              <button onClick={copyCode} style={{
+                display:'block', width:'100%', fontFamily:'monospace', fontWeight:900,
+                fontSize:44, letterSpacing:'0.2em', color: T.ink,
+                background:'none', border:'none', cursor:'pointer', padding:'6px 0',
+                textAlign:'center', transition:'color .15s',
+              }}
+                onMouseEnter={e => (e.currentTarget.style.color = T.torch)}
+                onMouseLeave={e => (e.currentTarget.style.color = T.ink)}
               >
                 {room.code}
               </button>
-              <motion.p
-                className="text-center text-xs mt-1"
-                animate={{ color: copied ? '#10B981' : 'rgba(255,255,255,0.3)' }}
-              >
-                {copied ? '✅ Copied!' : 'Tap to copy'}
-              </motion.p>
-
-              {/* QR Code */}
-              <div className="flex justify-center mt-4">
+              <p style={{ textAlign:'center', fontSize:12, color: copied ? T.leaf : T.ink3, margin:'2px 0 16px', transition:'color .2s' }}>
+                {copied ? '✅ Copied!' : 'Click to copy'}
+              </p>
+              <div style={{ display:'flex', justifyContent:'center' }}>
                 <QRCode code={room.code} />
               </div>
-              <p className="text-center text-xs text-white/30 mt-2">Scan to join instantly</p>
+              <p style={{ textAlign:'center', fontSize:11, color: T.ink3, marginTop:8, fontFamily:'monospace' }}>Scan to join instantly</p>
             </motion.div>
 
-            {/* Join URL */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="glass rounded-xl p-4"
-            >
-              <p className="text-white/50 text-xs mb-1">Share link</p>
-              <p className="font-mono text-xs text-brand-cyan break-all">
-                {typeof window !== 'undefined' ? `${window.location.origin}?join=${room.code}` : `internetolympics.gg?join=${room.code}`}
+            {/* Share link */}
+            <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:.08 }}
+              style={{ background: T.paper, border:`1px solid ${T.line}`, borderRadius:16, padding:16 }}>
+              <p style={{ margin:'0 0 4px', fontSize:11, color: T.ink3, fontFamily:'monospace', textTransform:'uppercase', letterSpacing:'0.12em' }}>Share link</p>
+              <p style={{ fontFamily:'monospace', fontSize:12, color: T.lake, wordBreak:'break-all', margin:0 }}>
+                {typeof window !== 'undefined' ? `${window.location.origin}?join=${room.code}` : `...?join=${room.code}`}
               </p>
             </motion.div>
 
-            {/* Game playlist */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 }}
-              className="glass rounded-xl p-4"
-            >
-              <p className="text-white/50 text-xs uppercase tracking-wider mb-3 font-mono">
-                {isHost ? '🎮 Game Picker' : '🎮 Game Playlist'}
+            {/* Game picker */}
+            <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:.12 }}
+              style={{ background: T.paper, border:`1px solid ${T.line}`, borderRadius:16, padding:16 }}>
+              <p style={{ margin:'0 0 12px', fontFamily:'monospace', fontSize:11, color: T.ink3, textTransform:'uppercase', letterSpacing:'0.14em' }}>
+                {isHost ? '🎮 Game Picker' : '🎮 Playlist'}
               </p>
               <GamePicker playlist={room.gamePlaylist} isHost={isHost} />
             </motion.div>
           </div>
 
-          {/* Center/Right: Players + Chat */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Tab switcher */}
-            <div className="flex gap-2">
-              {(['players', 'chat'] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTab(t)}
-                  className={`px-4 py-2 rounded-xl text-sm font-bold transition-all capitalize ${
-                    tab === t
-                      ? 'bg-brand-purple text-white'
-                      : 'bg-white/5 text-white/50 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  {t === 'players' ? `👥 Players (${connectedPlayers.length}/${room.maxPlayers})` : '💬 Chat'}
+          {/* ── Right column ── */}
+          <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+
+            {/* Tab strip */}
+            <div style={{ display:'flex', gap:6 }}>
+              {(['players','chat'] as const).map(t => (
+                <button key={t} onClick={() => setTab(t)} className="lobby-btn" style={{
+                  padding:'9px 18px', borderRadius:999,
+                  border:`1px solid ${tab === t ? T.ink : T.line}`,
+                  background: tab === t ? T.ink : 'transparent',
+                  color: tab === t ? T.bg : T.ink2,
+                  fontFamily: D.display, fontWeight:600, fontSize:13, cursor:'pointer',
+                }}>
+                  {t === 'players' ? `👥 Players (${connected.length}/${room.maxPlayers})` : '💬 Chat'}
                 </button>
               ))}
             </div>
 
+            {/* Players / Chat panel */}
             <motion.div
-              className="glass rounded-2xl p-4"
-              style={{ minHeight: '340px' }}
-            >
+              style={{ background: T.paper, border:`1px solid ${T.line}`, borderRadius:20, padding:16, minHeight:320 }}>
               {tab === 'players' ? (
-                <div className="space-y-2">
+                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                   <AnimatePresence>
-                    {room.players.filter((p) => p.isConnected).map((player) => (
-                      <PlayerCard
-                        key={player.id}
-                        player={player}
-                        isMe={player.id === playerId}
-                        isHost={isHost}
-                      />
+                    {room.players.filter(p => p.isConnected).map(player => (
+                      <PlayerCard key={player.id} player={player} isMe={player.id === playerId} isHost={isHost} />
                     ))}
                   </AnimatePresence>
-
-                  {connectedPlayers.length < 2 && (
-                    <p className="text-center text-white/30 text-sm py-4">
-                      Waiting for more players... Share the code! 🔗
+                  {connected.length < 2 && (
+                    <p style={{ textAlign:'center', color: T.ink3, fontSize:14, padding:'20px 0' }}>
+                      Waiting for more players… Share the code! 🔗
                     </p>
                   )}
                 </div>
@@ -532,76 +504,55 @@ export default function LobbyRoom() {
               )}
             </motion.div>
 
-            {/* Ready / Start controls */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="glass rounded-2xl p-4"
-            >
-              {/* Ready progress */}
-              <div className="mb-4">
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-white/50">
-                    {readyCount} / {connectedPlayers.length - (isHost ? 1 : 0)} ready
-                  </span>
-                  {allReady && connectedPlayers.length >= 1 && (
-                    <span className="text-green-400 font-bold animate-pulse">✨ All ready!</span>
+            {/* Ready / Start */}
+            <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:.2 }}
+              style={{ background: T.paper, border:`1px solid ${T.line}`, borderRadius:20, padding:20 }}>
+
+              {/* Progress bar */}
+              <div style={{ marginBottom:16 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, color: T.ink2, marginBottom:8 }}>
+                  <span>{readyCount} / {nonHostCount} ready</span>
+                  {allReady && connected.length >= 1 && (
+                    <span style={{ color: T.leaf, fontWeight:700 }}>✨ All ready!</span>
                   )}
                 </div>
-                <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                <div style={{ height:6, borderRadius:999, background: T.bg2, overflow:'hidden' }}>
                   <motion.div
-                    className="h-full rounded-full"
-                    style={{
-                      background: 'linear-gradient(90deg, #06B6D4, #7C3AED)',
-                      boxShadow: '0 0 8px rgba(124,58,237,0.6)',
-                    }}
-                    animate={{
-                      width: `${connectedPlayers.length > 1
-                        ? (readyCount / (connectedPlayers.length - (isHost ? 1 : 0))) * 100
-                        : 0}%`
-                    }}
-                    transition={{ type: 'spring', stiffness: 200 }}
+                    style={{ height:'100%', borderRadius:999, background: `linear-gradient(90deg, ${T.lake}, ${T.torch})` }}
+                    animate={{ width:`${readyPct}%` }}
+                    transition={{ type:'spring', stiffness:200 }}
                   />
                 </div>
               </div>
 
-              <div className="flex gap-3">
-                {/* Ready button for non-hosts */}
+              <div style={{ display:'flex', gap:10 }}>
                 {!isHost && (
-                  <button
-                    onClick={() => setReady(!me?.ready)}
-                    className="flex-1 py-3 rounded-xl font-display font-bold text-lg transition-all hover:scale-105 active:scale-95"
-                    style={{
-                      background: me?.ready
-                        ? 'rgba(16,185,129,0.2)'
-                        : 'linear-gradient(135deg, #06B6D4, #7C3AED)',
-                      border: me?.ready ? '1px solid rgba(16,185,129,0.5)' : 'none',
-                      color: me?.ready ? '#10B981' : 'white',
-                    }}
-                  >
+                  <button onClick={() => setReady(!me?.ready)} className="lobby-btn" style={{
+                    flex:1, padding:'14px', borderRadius:999, cursor:'pointer',
+                    fontFamily: D.display, fontWeight:700, fontSize:16,
+                    background: me?.ready ? `${T.leaf}1a` : T.torch,
+                    color: me?.ready ? T.leaf : T.paper,
+                    border: me?.ready ? `1px solid ${T.leaf}55` : `1px solid ${T.torch}`,
+                    boxShadow: me?.ready ? 'none' : `0 6px 20px -6px ${T.torch}88`,
+                  }}>
                     {me?.ready ? '✅ Ready!' : '⏳ Not Ready'}
                   </button>
                 )}
-
-                {/* Start button for host */}
                 {isHost && (
-                  <button
-                    onClick={startGame}
-                    disabled={connectedPlayers.length < 1}
-                    className="flex-1 py-3 rounded-xl font-display font-bold text-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{
-                      background: 'linear-gradient(135deg, #7C3AED, #EC4899)',
-                      boxShadow: '0 4px 20px rgba(124,58,237,0.5)',
-                    }}
-                  >
+                  <button onClick={startGame} disabled={connected.length < 1} className="lobby-btn" style={{
+                    flex:1, padding:'14px', borderRadius:999, border:'none', cursor:'pointer',
+                    fontFamily: D.display, fontWeight:700, fontSize:16,
+                    background: T.torch, color: T.paper,
+                    boxShadow:`0 6px 20px -6px ${T.torch}88`,
+                    opacity: connected.length < 1 ? .5 : 1,
+                  }}>
                     🚀 Start Game!
                   </button>
                 )}
               </div>
 
-              {isHost && connectedPlayers.length === 1 && (
-                <p className="text-center text-white/30 text-xs mt-2">
+              {isHost && connected.length === 1 && (
+                <p style={{ textAlign:'center', fontSize:12, color: T.ink3, marginTop:8 }}>
                   You can start solo to test, or wait for friends.
                 </p>
               )}
