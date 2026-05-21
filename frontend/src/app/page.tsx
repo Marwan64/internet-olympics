@@ -42,7 +42,7 @@ const GAMES = [
     tag: 'Party · Platforming', badge: 'FIRE',
     desc: 'The floor turns to molten death. Climb the furniture. Last one not on fire wins.',
     descShort: "Climb the furniture. Don't touch the carpet. Don't trust your friends.",
-    players: '2 – 16', time: '90 sec', vibe: 'Panic',
+    players: '2 – 16', time: '3 min', vibe: 'Panic',
     image: '/floor-is-lava.png',
   },
   {
@@ -51,7 +51,7 @@ const GAMES = [
     tag: 'Sports · Teams', badge: 'TEAMS',
     desc: 'Tiny pitch, big chaos. Rocket physics, no fouls, emoji players, pure mayhem.',
     descShort: 'Rocket physics. No fouls. Chaos on a pitch the size of a postage stamp.',
-    players: '4 – 12', time: '5 min', vibe: 'Hype',
+    players: '4 – 12', time: '3 min', vibe: 'Hype',
     image: '/soccer.png',
   },
   {
@@ -60,7 +60,7 @@ const GAMES = [
     tag: 'Platforming · Solo', badge: 'HARD',
     desc: 'Spike pits, moving platforms, spinning blades, and checkpoints. Keep climbing.',
     descShort: 'Spike pits, disappearing tiles, spinning blades. Voice chat recommended.',
-    players: '1 – 10', time: '12 min', vibe: 'Suffering',
+    players: '1 – 10', time: '4 min', vibe: 'Suffering',
     image: '/rage-obby.png',
   },
   {
@@ -69,7 +69,7 @@ const GAMES = [
     tag: 'Racing · Items', badge: 'NEW',
     desc: 'Karts, power-ups, star mode, fireballs — first to the flag wins.',
     descShort: 'Karts, banana peels, power-ups, blue flames. You already know how it goes.',
-    players: '2 – 12', time: '6 min', vibe: 'Hostile',
+    players: '2 – 12', time: '3 min', vibe: 'Hostile',
     image: '/mario-race.png',
   },
   {
@@ -78,7 +78,7 @@ const GAMES = [
     tag: 'Combat · Free-for-all', badge: 'FIRE',
     desc: 'No health bars. Punch your friends off a tiny platform. Ring out and lose forever.',
     descShort: 'No health bars. Punch your friends off a tiny platform. Ring out, lose forever.',
-    players: '2 – 8', time: '4 min', vibe: 'Aggression',
+    players: '2 – 8', time: '2 min', vibe: 'Aggression',
     image: '/knockback-arena.png',
   },
   {
@@ -87,7 +87,7 @@ const GAMES = [
     tag: 'Racing · Co-op', badge: 'CO-OP',
     desc: 'Wobbly carts, slippery aisles, milk on the floor. Cross the checkout first.',
     descShort: 'Wobbly carts, slippery aisles, milk on the floor. Cross the checkout first.',
-    players: '2 – 16', time: '7 min', vibe: 'Goofy',
+    players: '2 – 16', time: '3 min', vibe: 'Goofy',
     image: '/shopping-cart-racing.png',
   },
 ];

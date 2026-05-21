@@ -158,7 +158,14 @@ export class GameManager {
     this.roomManager.resetRoundScores(roomId);
 
     const GameClass = GAME_REGISTRY[gameType];
-    const GAME_DURATIONS: Partial<Record<GameType, number>> = { 'rage-obby': 90, 'floor-is-lava': 90, 'physics-soccer': 90 };
+    const GAME_DURATIONS: Partial<Record<GameType, number>> = {
+      'floor-is-lava':        180,  // 3 min — survival climb
+      'physics-soccer':       180,  // 3 min — short match
+      'rage-obby':            240,  // 4 min — obstacle course
+      'mario-race':           180,  // 3 min — race to finish
+      'knockback-arena':      120,  // 2 min — quick KO brawl
+      'shopping-cart-racing': 180,  // 3 min — racing lap
+    };
     const config: GameConfig = {
       roomId,
       playerIds: room.players.filter((p) => p.isConnected).map((p) => p.socketId),
