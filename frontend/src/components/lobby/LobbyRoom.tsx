@@ -9,23 +9,23 @@ import ToastContainer from '@/components/ui/ToastContainer';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const T = {
-  bg:      '#F4EEE2',
-  bg2:     '#EDE5D2',
-  paper:   '#FBF7EE',
-  ink:     '#14161B',
-  ink2:    '#2A2D36',
-  ink3:    '#5A5F6C',
-  line:    'rgba(20,22,27,0.12)',
-  lineStr: 'rgba(20,22,27,0.22)',
-  torch:   '#E94F1D',
-  lake:    '#1F5BD8',
-  gold:    '#F4B400',
-  leaf:    '#1E5A3A',
-  grape:   '#5E37B7',
+  bg:      '#0A0A12',
+  bg2:     '#0E0E18',
+  paper:   '#15151F',
+  ink:     '#F4F4F6',
+  ink2:    '#CDCFD7',
+  ink3:    '#8A8DA0',
+  line:    'rgba(255,255,255,0.08)',
+  lineStr: 'rgba(255,255,255,0.16)',
+  torch:   '#FF4D2D',
+  lake:    '#3B82F6',
+  gold:    '#F59E0B',
+  leaf:    '#00C271',
+  grape:   '#8B5CF6',
 };
 
-const D = { display: "'Bricolage Grotesque',system-ui,sans-serif" as const };
-const SERIF = "'Instrument Serif',Georgia,serif" as const;
+const D = { display: "'Manrope', system-ui, sans-serif" as const };
+const FONT_MONO = "'Geist Mono', ui-monospace, monospace";
 
 // ── Game metadata ─────────────────────────────────────────────────────────────
 
@@ -89,7 +89,7 @@ function GamePicker({ playlist, isHost }: { playlist: GameType[]; isHost: boolea
       <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
         {playlist.map((game, idx) => (
           <div key={idx} style={{ display:'flex', alignItems:'center', gap:8, fontSize:14, color: T.ink2 }}>
-            <span style={{ fontFamily:'monospace', fontSize:11, color: T.ink3, width:16 }}>{idx + 1}.</span>
+            <span style={{ fontFamily:FONT_MONO, fontSize:11, color: T.ink3, width:16 }}>{idx + 1}.</span>
             {gameLabel(game)}
           </div>
         ))}
@@ -165,7 +165,7 @@ function GamePicker({ playlist, isHost }: { playlist: GameType[]; isHost: boolea
 
       {/* Playlist preview */}
       <div style={{ paddingTop:8, borderTop:`1px solid ${T.line}` }}>
-        <p style={{ margin:'0 0 6px', fontSize:11, color: T.ink3, fontFamily:'monospace', textTransform:'uppercase', letterSpacing:'0.1em' }}>Playlist:</p>
+        <p style={{ margin:'0 0 6px', fontSize:11, color: T.ink3, fontFamily:FONT_MONO, textTransform:'uppercase', letterSpacing:'0.1em' }}>Playlist:</p>
         <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
           {playlist.map((g, i) => (
             <span key={i} style={{ fontSize:11, background: T.bg2, borderRadius:6, padding:'3px 8px', color: T.ink2 }}>
@@ -188,7 +188,7 @@ function QRCode({ code }: { code: string }) {
       if (canvasRef.current) {
         QR.toCanvas(canvasRef.current, url, {
           width: 132, margin: 1,
-          color: { dark: '#14161B', light: '#FBF7EE' },
+          color: { dark: '#F4F4F6', light: '#15151F' },
         });
       }
     });
@@ -233,7 +233,7 @@ function PlayerCard({ player, isMe, isHost: viewerIsHost }: { player: Player; is
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:6 }}>
           <span style={{ fontFamily: D.display, fontWeight:600, fontSize:14, color: T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{player.username}</span>
-          {isMe && <span style={{ fontSize:11, color: T.torch, fontFamily:'monospace' }}>(you)</span>}
+          {isMe && <span style={{ fontSize:11, color: T.torch, fontFamily:FONT_MONO }}>(you)</span>}
         </div>
         <div style={{ fontSize:12, color: T.ink3, marginTop:2 }}>
           {!player.isConnected ? '🔴 Reconnecting...' : player.ready ? '✅ Ready' : '⏳ Waiting...'}
@@ -288,7 +288,7 @@ function ChatPanel() {
           value={input} onChange={e => setInput(e.target.value)}
           placeholder="Say something..." maxLength={200}
           style={{
-            flex:1, background: T.bg, border:`1.5px solid ${T.line}`, borderRadius:10,
+            flex:1, background: T.bg2, border:`1.5px solid ${T.line}`, borderRadius:10,
             padding:'9px 12px', color: T.ink, fontFamily:'inherit', fontSize:14,
             outline:'none',
           }}
@@ -356,7 +356,7 @@ export default function LobbyRoom() {
   }
 
   return (
-    <div style={{ minHeight:'100vh', background: T.bg, overflowX:'hidden' }}>
+    <div style={{ minHeight:'100vh', background: T.bg, overflowX:'hidden', color: T.ink }}>
       <style>{`
         .lobby-btn { transition: transform .15s ease, background .15s ease; }
         .lobby-btn:hover { transform: translateY(-1px); }
@@ -370,7 +370,7 @@ export default function LobbyRoom() {
             initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
             style={{
               position:'fixed', inset:0, zIndex:50,
-              background:'rgba(20,22,27,0.75)', backdropFilter:'blur(6px)',
+              background:'rgba(0,0,0,0.88)', backdropFilter:'blur(12px)',
               display:'flex', alignItems:'center', justifyContent:'center',
             }}
           >
@@ -406,7 +406,7 @@ export default function LobbyRoom() {
               <span style={{ fontFamily: D.display, fontWeight:600, fontSize:14, color: T.ink3, letterSpacing:'-0.01em' }}>Internet Olympics</span>
             </div>
             <h1 style={{ fontFamily: D.display, fontWeight:800, fontSize:'clamp(28px,4vw,42px)', color: T.ink, margin:0, letterSpacing:'-0.035em', lineHeight:1 }}>
-              Game <em style={{ fontFamily: SERIF, fontStyle:'italic', fontWeight:400, color: T.torch }}>Lobby</em>
+              Game <em style={{ fontStyle:'italic', fontWeight:300, color: T.torch }}>Lobby</em>
             </h1>
           </motion.div>
           <button onClick={leaveRoom} className="lobby-btn" style={{
@@ -425,9 +425,9 @@ export default function LobbyRoom() {
             {/* Room Code */}
             <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }}
               style={{ background: T.paper, border:`1px solid ${T.lineStr}`, borderRadius:20, padding:20 }}>
-              <p style={{ margin:'0 0 6px', fontFamily:'monospace', fontSize:11, color: T.ink3, textTransform:'uppercase', letterSpacing:'0.16em' }}>Room Code</p>
+              <p style={{ margin:'0 0 6px', fontFamily:FONT_MONO, fontSize:11, color: T.ink3, textTransform:'uppercase', letterSpacing:'0.16em' }}>Room Code</p>
               <button onClick={copyCode} style={{
-                display:'block', width:'100%', fontFamily:'monospace', fontWeight:900,
+                display:'block', width:'100%', fontFamily:FONT_MONO, fontWeight:900,
                 fontSize:44, letterSpacing:'0.2em', color: T.ink,
                 background:'none', border:'none', cursor:'pointer', padding:'6px 0',
                 textAlign:'center', transition:'color .15s',
@@ -443,14 +443,14 @@ export default function LobbyRoom() {
               <div style={{ display:'flex', justifyContent:'center' }}>
                 <QRCode code={room.code} />
               </div>
-              <p style={{ textAlign:'center', fontSize:11, color: T.ink3, marginTop:8, fontFamily:'monospace' }}>Scan to join instantly</p>
+              <p style={{ textAlign:'center', fontSize:11, color: T.ink3, marginTop:8, fontFamily:FONT_MONO }}>Scan to join instantly</p>
             </motion.div>
 
             {/* Share link */}
             <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:.08 }}
               style={{ background: T.paper, border:`1px solid ${T.line}`, borderRadius:16, padding:16 }}>
-              <p style={{ margin:'0 0 4px', fontSize:11, color: T.ink3, fontFamily:'monospace', textTransform:'uppercase', letterSpacing:'0.12em' }}>Share link</p>
-              <p style={{ fontFamily:'monospace', fontSize:12, color: T.lake, wordBreak:'break-all', margin:0 }}>
+              <p style={{ margin:'0 0 4px', fontSize:11, color: T.ink3, fontFamily:FONT_MONO, textTransform:'uppercase', letterSpacing:'0.12em' }}>Share link</p>
+              <p style={{ fontFamily:FONT_MONO, fontSize:12, color: T.lake, wordBreak:'break-all', margin:0 }}>
                 {typeof window !== 'undefined' ? `${window.location.origin}?join=${room.code}` : `...?join=${room.code}`}
               </p>
             </motion.div>
@@ -458,7 +458,7 @@ export default function LobbyRoom() {
             {/* Game picker */}
             <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:.12 }}
               style={{ background: T.paper, border:`1px solid ${T.line}`, borderRadius:16, padding:16 }}>
-              <p style={{ margin:'0 0 12px', fontFamily:'monospace', fontSize:11, color: T.ink3, textTransform:'uppercase', letterSpacing:'0.14em' }}>
+              <p style={{ margin:'0 0 12px', fontFamily:FONT_MONO, fontSize:11, color: T.ink3, textTransform:'uppercase', letterSpacing:'0.14em' }}>
                 {isHost ? '🎮 Game Picker' : '🎮 Playlist'}
               </p>
               <GamePicker playlist={room.gamePlaylist} isHost={isHost} />

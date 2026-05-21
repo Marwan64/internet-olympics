@@ -7,22 +7,22 @@ import { PlayerResult } from '@/types';
 import ToastContainer from './ToastContainer';
 
 const T = {
-  bg:      '#F4EEE2',
-  bg2:     '#EDE5D2',
-  paper:   '#FBF7EE',
-  ink:     '#14161B',
-  ink2:    '#2A2D36',
-  ink3:    '#5A5F6C',
-  line:    'rgba(20,22,27,0.12)',
-  lineStr: 'rgba(20,22,27,0.22)',
-  torch:   '#E94F1D',
-  lake:    '#1F5BD8',
-  gold:    '#F4B400',
-  leaf:    '#1E5A3A',
-  grape:   '#5E37B7',
+  bg:      '#0A0A12',
+  bg2:     '#0E0E18',
+  paper:   '#15151F',
+  ink:     '#F4F4F6',
+  ink2:    '#CDCFD7',
+  ink3:    '#8A8DA0',
+  line:    'rgba(255,255,255,0.08)',
+  lineStr: 'rgba(255,255,255,0.16)',
+  torch:   '#FF4D2D',
+  lake:    '#3B82F6',
+  gold:    '#F59E0B',
+  leaf:    '#00C271',
+  grape:   '#8B5CF6',
 };
-const D = { display: "'Bricolage Grotesque',system-ui,sans-serif" as const };
-const SERIF = "'Instrument Serif',Georgia,serif" as const;
+const D = { display: "'Manrope', system-ui, sans-serif" as const };
+const FONT_MONO = "'Geist Mono', ui-monospace, monospace";
 
 const RANK_ACCENT = [T.gold, T.ink3, '#B45309'];
 const RANK_HEIGHTS = [192, 140, 112];
@@ -49,7 +49,7 @@ export default function PodiumScreen() {
   const podiumRanks = [2, 1, 3];
 
   return (
-    <div style={{ minHeight:'100vh', background: T.bg, display:'flex', flexDirection:'column', overflowX:'hidden' }}>
+    <div style={{ minHeight:'100vh', background: T.bg, display:'flex', flexDirection:'column', overflowX:'hidden', color: T.ink }}>
       <style>{`
         .pod-btn { transition: transform .15s ease; }
         .pod-btn:hover { transform: translateY(-2px); }
@@ -69,7 +69,7 @@ export default function PodiumScreen() {
             fontSize:'clamp(52px,10vw,96px)', lineHeight:.9, letterSpacing:'-0.045em',
           }}>
             Game{' '}
-            <em style={{ fontFamily: SERIF, fontStyle:'italic', fontWeight:400, color: T.torch }}>Over</em>
+            <em style={{ fontStyle:'italic', fontWeight:300, color: T.torch }}>Over</em>
           </h1>
 
           {podiumData.champion && (
@@ -209,10 +209,10 @@ function LeaderboardRow({ player, isMe }: { player: PlayerResult; isMe: boolean 
   return (
     <div style={{
       display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderRadius:12,
-      background: isMe ? `${T.torch}0f` : T.bg2,
-      border:`1px solid ${isMe ? `${T.torch}44` : T.line}`,
+      background: isMe ? `${T.torch}18` : T.paper,
+      border:`1px solid ${isMe ? `${T.torch}55` : T.line}`,
     }}>
-      <span style={{ fontFamily:'monospace', fontWeight:700, fontSize:13, color: T.ink3, width:24, textAlign:'center' }}>#{player.rank}</span>
+      <span style={{ fontFamily:FONT_MONO, fontWeight:700, fontSize:13, color: T.ink3, width:24, textAlign:'center' }}>#{player.rank}</span>
       <div style={{
         width:34, height:34, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
         fontSize:17, flexShrink:0, background:`${player.color}22`, border:`2px solid ${player.color}`,

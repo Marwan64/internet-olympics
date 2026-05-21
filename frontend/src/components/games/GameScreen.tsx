@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGameStore, useGameState, useActiveChaos } from '@/store/gameStore';
 import MarioGame from './MarioGame';
@@ -14,21 +15,22 @@ import ToastContainer from '@/components/ui/ToastContainer';
 import { GameState, Player, PlayerResult } from '@/types';
 
 const T = {
-  bg:     '#F4EEE2',
-  paper:  '#FBF7EE',
-  ink:    '#14161B',
-  ink2:   '#2A2D36',
-  ink3:   '#5A5F6C',
-  line:   'rgba(20,22,27,0.12)',
-  lineStr:'rgba(20,22,27,0.22)',
-  torch:  '#E94F1D',
-  lake:   '#1F5BD8',
-  gold:   '#F4B400',
-  leaf:   '#1E5A3A',
-  grape:  '#5E37B7',
+  bg:     '#0A0A12',
+  bg2:    '#0E0E18',
+  paper:  '#15151F',
+  ink:    '#F4F4F6',
+  ink2:   '#CDCFD7',
+  ink3:   '#8A8DA0',
+  line:   'rgba(255,255,255,0.08)',
+  lineStr:'rgba(255,255,255,0.16)',
+  torch:  '#FF4D2D',
+  lake:   '#3B82F6',
+  gold:   '#F59E0B',
+  leaf:   '#00C271',
+  grape:  '#8B5CF6',
 };
-const D = { display: "'Bricolage Grotesque',system-ui,sans-serif" as const };
-const SERIF = "'Instrument Serif',Georgia,serif" as const;
+const D = { display: "'Manrope', system-ui, sans-serif" as const };
+const FONT_MONO = "'Geist Mono', ui-monospace, monospace";
 
 // ── Mini Leaderboard ──────────────────────────────────────────────────────────
 
@@ -50,10 +52,10 @@ function MiniLeaderboard({ gameState }: { gameState: GameState }) {
       {entries.map((p: Player & { roundScore: number }, idx: number) => (
         <motion.div key={p.id} layout style={{
           display:'flex', alignItems:'center', gap:8, padding:'7px 10px', borderRadius:10,
-          background: p.id === playerId ? `${T.torch}0f` : 'rgba(20,22,27,0.04)',
+          background: p.id === playerId ? `${T.torch}18` : 'rgba(255,255,255,0.03)',
           border:`1px solid ${p.id === playerId ? `${T.torch}44` : T.line}`,
         }}>
-          <span style={{ fontFamily:'monospace', fontSize:11, color: T.ink3, width:14, textAlign:'center' }}>{idx+1}</span>
+          <span style={{ fontFamily:FONT_MONO, fontSize:11, color: T.ink3, width:14, textAlign:'center' }}>{idx+1}</span>
           <div style={{
             width:26, height:26, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
             fontSize:14, flexShrink:0, background:`${p.color}22`, border:`1.5px solid ${p.color}`,
@@ -72,7 +74,7 @@ function TimerBar({ timeRemaining, totalTime }: { timeRemaining: number; totalTi
   const pct      = Math.max(0, (timeRemaining / totalTime) * 100);
   const isUrgent = timeRemaining <= 10;
   return (
-    <div style={{ position:'relative', height:8, background:'rgba(20,22,27,0.1)', borderRadius:999, overflow:'hidden' }}>
+    <div style={{ position:'relative', height:8, background:'rgba(255,255,255,0.08)', borderRadius:999, overflow:'hidden' }}>
       <motion.div
         style={{
           position:'absolute', inset:'0 auto 0 0', borderRadius:999,
@@ -111,7 +113,7 @@ function GameResultsScreen() {
       <motion.div initial={{ opacity:0, scale:.9 }} animate={{ opacity:1, scale:1 }} style={{ width:'100%', maxWidth:420 }}>
 
         <h2 style={{ fontFamily: D.display, fontWeight:800, fontSize:36, color: T.ink, textAlign:'center', margin:'0 0 4px', letterSpacing:'-0.035em' }}>
-          Round <em style={{ fontFamily: SERIF, fontStyle:'italic', fontWeight:400, color: T.torch }}>Over!</em>
+          Round <em style={{ fontStyle:'italic', fontWeight:300, color: T.torch }}>Over!</em>
         </h2>
 
         {results.highlights.length > 0 && (
@@ -132,7 +134,7 @@ function GameResultsScreen() {
               <motion.div key={s.playerId} initial={{ opacity:0, x:-16 }} animate={{ opacity:1, x:0 }} transition={{ delay:idx*.07 }}
                 style={{
                   display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:12,
-                  background: isMe ? `${T.torch}0f` : 'rgba(20,22,27,0.03)',
+                  background: isMe ? `${T.torch}18` : 'rgba(255,255,255,0.03)',
                   border:`1px solid ${isMe ? `${T.torch}44` : T.line}`,
                 }}>
                 <span style={{ fontSize:18 }}>{medals[idx] ?? `${idx+1}.`}</span>
@@ -160,7 +162,7 @@ function GameResultsScreen() {
           </motion.div>
         )}
 
-        <p style={{ textAlign:'center', fontFamily:'monospace', fontSize:12, color: T.ink3 }}>Next game loading…</p>
+        <p style={{ textAlign:'center', fontFamily:FONT_MONO, fontSize:12, color: T.ink3 }}>Next game loading…</p>
       </motion.div>
     </div>
   );
@@ -170,12 +172,12 @@ function GameResultsScreen() {
 
 function GameIntroScreen({ gameState }: { gameState: GameState }) {
   const INFO: Record<string, { name: string; emoji: string; desc: string; color: string }> = {
-    'mario-race':           { name:'Mario Race',           emoji:'🍄', color: T.torch,  desc:'Race to the 🏁 pipe! Stomp Goombas, hit ? blocks, use power-ups. First one in wins!' },
-    'knockback-arena':      { name:'Knockback Arena',      emoji:'👊', color: T.grape,  desc:'Punch and dash everyone off the platforms. Last one standing wins.' },
+    'mario-race':           { name:'Mario Race',           emoji:'🍄', color: T.lake,   desc:'Race to the 🏁 pipe! Stomp Goombas, hit ? blocks, use power-ups. First one in wins!' },
+    'knockback-arena':      { name:'Knockback Arena',      emoji:'👊', color: '#EC4899', desc:'Punch and dash everyone off the platforms. Last one standing wins.' },
     'shopping-cart-racing': { name:'Shopping Cart Racing', emoji:'🛒', color: T.gold,   desc:'Drift down park roads, knock rivals off course, reach the finish line!' },
-    'rage-obby':            { name:'Rage Obby',            emoji:'😤', color: T.leaf,   desc:'Jump across platforms, dodge spikes, ride moving ledges. Die → last checkpoint!' },
-    'floor-is-lava':        { name:'Floor is Lava',        emoji:'🌋', color:'#B91C1C', desc:'The lava is rising! Climb the tower, swing your bat, be the last one alive.' },
-    'physics-soccer':       { name:'Physics Soccer',       emoji:'⚽', color: T.lake,   desc:'Slam the ball into the goal. Chaotic physics, boost dashes, ridiculous collisions.' },
+    'rage-obby':            { name:'Rage Obby',            emoji:'😤', color: T.grape,  desc:'Jump across platforms, dodge spikes, ride moving ledges. Die → last checkpoint!' },
+    'floor-is-lava':        { name:'Floor is Lava',        emoji:'🌋', color: T.torch,  desc:'The lava is rising! Climb the tower, knock rivals off, be the last one alive.' },
+    'physics-soccer':       { name:'Physics Soccer',       emoji:'⚽', color: T.leaf,   desc:'Slam the ball into the goal. Chaotic physics, boost dashes, ridiculous collisions.' },
   };
 
   const info = INFO[gameState.type] ?? { name: gameState.type, emoji:'🎮', color: T.torch, desc:'Get ready!' };
@@ -195,12 +197,12 @@ function GameIntroScreen({ gameState }: { gameState: GameState }) {
         </motion.h2>
 
         <motion.p initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:.35 }}
-          style={{ fontFamily: D.display, fontSize:16, color:'rgba(251,247,238,0.65)', marginBottom:20, lineHeight:1.5 }}>
+          style={{ fontFamily: D.display, fontSize:16, color: T.ink2, marginBottom:20, lineHeight:1.5 }}>
           {info.desc}
         </motion.p>
 
         <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:.5 }}
-          style={{ fontFamily:'monospace', fontSize:12, color:'rgba(251,247,238,0.4)', marginBottom:16 }}>
+          style={{ fontFamily:FONT_MONO, fontSize:12, color: T.ink3, marginBottom:16 }}>
           Game {gameState.gameNumber} of {gameState.totalGames}
         </motion.div>
 
@@ -220,21 +222,27 @@ export default function GameScreen() {
   const gameResults = useGameStore((s) => s.gameResults);
   const activeChaos = useActiveChaos();
   const { leaveRoom } = useSocketActions();
+  const totalTimeRef = React.useRef<number>(180);
 
   void leaveRoom; // available if needed
 
   if (!gameState) return null;
 
+  // Capture the max timeRemaining seen as the total duration for the progress bar
+  if (gameState.timeRemaining > totalTimeRef.current || gameState.phase === 'intro') {
+    totalTimeRef.current = Math.max(gameState.timeRemaining, 1);
+  }
+
   const isPlaying  = gameState.phase === 'playing';
   const isIntro    = gameState.phase === 'intro';
   const isResults  = gameState.phase === 'results';
-  const totalTime  = 60;
+  const totalTime  = totalTimeRef.current;
 
   return (
     <div style={{ minHeight:'100vh', background:'#14161B', position:'relative', overflowX:'hidden' }}
       className={activeChaos?.type === 'SCREEN_SHAKE' ? 'chaos-shake' : ''}>
       <style>{`
-        .gs-panel { background: rgba(251,247,238,0.96); border: 1px solid rgba(20,22,27,0.14); backdrop-filter: blur(8px); }
+        .gs-panel { background: rgba(21,21,31,0.96); border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(8px); }
       `}</style>
 
       <ChaosAnnouncement />
@@ -260,7 +268,7 @@ export default function GameScreen() {
 
           {/* Game counter */}
           <div style={{ textAlign:'right' }}>
-            <div style={{ fontFamily:'monospace', fontSize:11, color: T.ink3, textTransform:'uppercase', letterSpacing:'0.1em' }}>
+            <div style={{ fontFamily:FONT_MONO, fontSize:11, color: T.ink3, textTransform:'uppercase', letterSpacing:'0.1em' }}>
               Game {gameState.gameNumber}/{gameState.totalGames}
             </div>
           </div>
@@ -276,7 +284,7 @@ export default function GameScreen() {
           <AnimatePresence mode="wait">
             {isResults && gameResults ? (
               <motion.div key="results" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
-                style={{ background: T.bg, borderRadius:18, overflow:'hidden' }}>
+                style={{ background: T.paper, borderRadius:18, overflow:'hidden' }}>
                 <GameResultsScreen />
               </motion.div>
             ) : isIntro ? (
@@ -294,7 +302,7 @@ export default function GameScreen() {
                 {gameState.type === 'floor-is-lava'        && <FloorIsLava />}
                 {gameState.type === 'physics-soccer'       && <PhysicsSoccer />}
                 {!['mario-race','knockback-arena','shopping-cart-racing','rage-obby','floor-is-lava','physics-soccer'].includes(gameState.type) && (
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:240, color:'rgba(251,247,238,0.4)', fontFamily: D.display, fontSize:18 }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:240, color: T.ink3, fontFamily: D.display, fontSize:18 }}>
                     Coming soon: {gameState.type} 🚧
                   </div>
                 )}
@@ -305,7 +313,7 @@ export default function GameScreen() {
 
         {/* Sidebar leaderboard */}
         <div className="gs-panel" style={{ borderRadius:16, padding:14, alignSelf:'start', position:'sticky', top:8 }}>
-          <p style={{ fontFamily:'monospace', fontSize:10, color: T.ink3, textTransform:'uppercase', letterSpacing:'0.16em', marginBottom:10 }}>Scores</p>
+          <p style={{ fontFamily:FONT_MONO, fontSize:10, color: T.ink3, textTransform:'uppercase', letterSpacing:'0.16em', marginBottom:10 }}>Scores</p>
           <MiniLeaderboard gameState={gameState} />
         </div>
       </div>
