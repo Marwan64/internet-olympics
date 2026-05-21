@@ -678,6 +678,7 @@ function Footer({ onCreateRoom }: { onCreateRoom: () => void }) {
 
 function SetupFlow({ onBack, mode }: { onBack: () => void; mode: 'create' | 'join' }) {
   const { createRoom, joinRoom } = useSocket();
+  const isConnected = useGameStore((s) => s.connection.connected);
   const [username, setUsername] = useState(useGameStore.getState().playerName);
   const [avatar, setAvatar]     = useState(useGameStore.getState().playerAvatar);
   const [color, setColor]       = useState(useGameStore.getState().playerColor);
@@ -808,13 +809,24 @@ function SetupFlow({ onBack, mode }: { onBack: () => void; mode: 'create' | 'joi
           )}
         </AnimatePresence>
 
+        {/* Connection status */}
+        {!isConnected && (
+          <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:13, color:'#92400e',
+            background:'#FFFBEA', border:'1px solid #F4B40066', borderRadius:10, padding:'9px 14px' }}>
+            <motion.span animate={{ rotate:360 }} transition={{ repeat:Infinity, duration:1.2, ease:'linear' }}>⟳</motion.span>
+            Connecting to server… please wait
+          </div>
+        )}
+
         {/* Submit */}
-        <button type="submit" disabled={loading} className="io-btn" style={{
-          width:'100%', padding:'14px', borderRadius:999, border:'none', cursor: loading ? 'default' : 'pointer',
+        <button type="submit" disabled={loading || !isConnected} className="io-btn" style={{
+          width:'100%', padding:'14px', borderRadius:999, border:'none',
+          cursor: (loading || !isConnected) ? 'default' : 'pointer',
           fontFamily:"'Bricolage Grotesque',system-ui,sans-serif", fontWeight:700, fontSize:16,
-          background: loading ? T.inkFaint : T.torch, color: T.paper,
-          boxShadow: loading ? 'none' : `0 6px 20px -6px ${T.torch}88`,
+          background: (loading || !isConnected) ? T.inkFaint : T.torch, color: T.paper,
+          boxShadow: (loading || !isConnected) ? 'none' : `0 6px 20px -6px ${T.torch}88`,
           display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+          opacity: !isConnected ? 0.6 : 1,
         }}>
           {loading
             ? <><motion.span animate={{ rotate:360 }} transition={{ repeat:Infinity, duration:1, ease:'linear' }}>⟳</motion.span>{mode === 'create' ? 'Creating...' : 'Joining...'}</>

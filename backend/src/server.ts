@@ -23,15 +23,28 @@ const httpServer = createServer(app);
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:3000';
 const PORT = Number(process.env.PORT ?? 3001);
 
+// Build allowed origins list — supports comma-separated list or single URL
+const allowedOrigins: string[] = FRONTEND_URL.split(',').map((u) => u.trim()).filter(Boolean);
+
+const corsOriginFn = (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
+  // Allow requests with no origin (server-to-server, curl, etc.)
+  if (!origin) { cb(null, true); return; }
+  if (allowedOrigins.some((allowed) => origin === allowed || origin.endsWith('.vercel.app'))) {
+    cb(null, true);
+  } else {
+    cb(new Error(`CORS: origin ${origin} not allowed`));
+  }
+};
+
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors({ origin: FRONTEND_URL, credentials: true }));
+app.use(cors({ origin: corsOriginFn, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
 
 // ── Socket.IO ──────────────────────────────────────────────────────────────────
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: {
-    origin: FRONTEND_URL,
+    origin: corsOriginFn,
     credentials: true,
   },
   pingTimeout: 20_000,

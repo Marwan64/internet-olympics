@@ -170,12 +170,20 @@ export function useSocket() {
     (username: string, avatar: string, color: string) =>
       new Promise<{ room: Room; playerId: string }>((resolve, reject) => {
         const socket = socketRef.current;
-        if (!socket) { reject(new Error('Not connected')); return; }
+        if (!socket || !socket.connected) {
+          reject(new Error('Not connected to server. Please wait and try again.'));
+          return;
+        }
+
+        const timer = setTimeout(() => {
+          reject(new Error('Server did not respond. The backend may be waking up — try again in a few seconds.'));
+        }, 10_000);
 
         socket.emit(
           'lobby:create',
           { username, avatar, color },
           (res: LobbyResponse<{ room: Room; playerId: string }>) => {
+            clearTimeout(timer);
             if (res.success) {
               store.setRoom(res.data.room);
               store.setPlayerId(res.data.playerId);
@@ -194,12 +202,20 @@ export function useSocket() {
     (code: string, username: string, avatar: string, color: string) =>
       new Promise<{ room: Room; playerId: string }>((resolve, reject) => {
         const socket = socketRef.current;
-        if (!socket) { reject(new Error('Not connected')); return; }
+        if (!socket || !socket.connected) {
+          reject(new Error('Not connected to server. Please wait and try again.'));
+          return;
+        }
+
+        const timer = setTimeout(() => {
+          reject(new Error('Server did not respond. The backend may be waking up — try again in a few seconds.'));
+        }, 10_000);
 
         socket.emit(
           'lobby:join',
           { code, username, avatar, color },
           (res: LobbyResponse<{ room: Room; playerId: string }>) => {
+            clearTimeout(timer);
             if (res.success) {
               store.setRoom(res.data.room);
               store.setPlayerId(res.data.playerId);
