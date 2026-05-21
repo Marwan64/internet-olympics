@@ -121,8 +121,65 @@ function buildPlatforms(): PlatDef[] {
     { cx:  0, cy:60.5, cz:  0, w:4, h:1, d:3, color: 0xfef08a,
       moving: { axis:'x', amp:2, spd:0.7 } },
 
-    // ── NEW Apex – glowing white-gold (top=65, cy=64.5) ───────────────────
-    { cx:  0, cy:64.5, cz:  0, w:4, h:1, d:4, color: 0xfef9c3 },
+    // ── Layer 15 (top=65, cy=64.5) ────────────────────────────────────────
+    { cx: -3, cy:64.5, cz:  2, w:4, h:1, d:3, color: 0xa5f3fc,
+      moving: { axis:'z', amp:3, spd:0.72 } },
+    { cx:  4, cy:64.5, cz: -2, w:3, h:1, d:3, color: 0xa5f3fc },
+
+    // ── Layer 16 (top=69, cy=68.5) ────────────────────────────────────────
+    { cx:  0, cy:68.5, cz: -3, w:4, h:1, d:3, color: 0x86efac,
+      moving: { axis:'x', amp:3, spd:0.75 } },
+    { cx: -4, cy:68.5, cz:  3, w:3, h:1, d:3, color: 0x86efac },
+
+    // ── Layer 17 (top=73, cy=72.5) ────────────────────────────────────────
+    { cx:  3, cy:72.5, cz:  1, w:3, h:1, d:3, color: 0xfca5a5,
+      moving: { axis:'z', amp:2.5, spd:0.78 } },
+    { cx: -3, cy:72.5, cz: -1, w:3, h:1, d:2, color: 0xfca5a5 },
+
+    // ── Layer 18 (top=77, cy=76.5) ────────────────────────────────────────
+    { cx:  0, cy:76.5, cz:  2, w:3, h:1, d:2, color: 0xc4b5fd,
+      moving: { axis:'x', amp:2.5, spd:0.82 } },
+    { cx:  3, cy:76.5, cz: -3, w:3, h:1, d:2, color: 0xc4b5fd },
+
+    // ── Layer 19 (top=81, cy=80.5) ────────────────────────────────────────
+    { cx: -2, cy:80.5, cz: -1, w:3, h:1, d:2, color: 0xfdba74,
+      moving: { axis:'z', amp:2, spd:0.86 } },
+    { cx:  3, cy:80.5, cz:  2, w:3, h:1, d:2, color: 0xfdba74,
+      moving: { axis:'x', amp:2, spd:0.88 } },
+
+    // ── Layer 20 (top=85, cy=84.5) ────────────────────────────────────────
+    { cx:  0, cy:84.5, cz:  0, w:3, h:1, d:2, color: 0x6ee7b7 },
+    { cx: -3, cy:84.5, cz:  3, w:2, h:1, d:2, color: 0x6ee7b7,
+      moving: { axis:'x', amp:2, spd:0.9 } },
+
+    // ── Layer 21 (top=89, cy=88.5) ────────────────────────────────────────
+    { cx:  2, cy:88.5, cz: -2, w:3, h:1, d:2, color: 0x93c5fd,
+      moving: { axis:'z', amp:2, spd:0.93 } },
+    { cx: -2, cy:88.5, cz:  1, w:2, h:1, d:2, color: 0x93c5fd },
+
+    // ── Layer 22 (top=93, cy=92.5) ────────────────────────────────────────
+    { cx:  0, cy:92.5, cz:  0, w:3, h:1, d:2, color: 0xf9a8d4,
+      moving: { axis:'x', amp:2, spd:0.96 } },
+    { cx:  3, cy:92.5, cz:  3, w:2, h:1, d:2, color: 0xf9a8d4 },
+
+    // ── Layer 23 (top=97, cy=96.5) ────────────────────────────────────────
+    { cx: -2, cy:96.5, cz: -2, w:2, h:1, d:2, color: 0xfde68a,
+      moving: { axis:'z', amp:1.5, spd:1.0 } },
+    { cx:  2, cy:96.5, cz:  2, w:2, h:1, d:2, color: 0xfde68a },
+
+    // ── Layer 24 (top=101, cy=100.5) ──────────────────────────────────────
+    { cx:  0, cy:100.5, cz:  0, w:2, h:1, d:2, color: 0xe9d5ff,
+      moving: { axis:'x', amp:1.5, spd:1.05 } },
+
+    // ── Layer 25 (top=105, cy=104.5) ──────────────────────────────────────
+    { cx:  0, cy:104.5, cz:  0, w:2, h:1, d:2, color: 0xfef3c7 },
+
+    // ── Layer 26 (top=109, cy=108.5) ──────────────────────────────────────
+    { cx: -1, cy:108.5, cz:  1, w:2, h:1, d:2, color: 0xbfdbfe,
+      moving: { axis:'z', amp:1, spd:1.1 } },
+
+    // ── FINAL APEX – throne in the sky (top=113, cy=112.5) ────────────────
+    { cx:  0, cy:112.5, cz:  0, w:5, h:1, d:5, color: 0xfef9c3 },
   ];
 
   return raw.map((p, idx) => ({ ...p, idx }));
@@ -187,7 +244,7 @@ export default function FloorIsLava() {
     // ── Scene ─────────────────────────────────────────────────────────────────
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0d0a1a);
-    scene.fog = new THREE.Fog(0x0d0a1a, 50, 120);
+    scene.fog = new THREE.Fog(0x0d0a1a, 60, 200);
 
     // ── Camera ────────────────────────────────────────────────────────────────
     const camera = new THREE.PerspectiveCamera(
@@ -203,11 +260,11 @@ export default function FloorIsLava() {
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 200;
-    sun.shadow.camera.left = -70;
-    sun.shadow.camera.right = 70;
-    sun.shadow.camera.top = 70;
-    sun.shadow.camera.bottom = -70;
+    sun.shadow.camera.far = 350;
+    sun.shadow.camera.left = -80;
+    sun.shadow.camera.right = 80;
+    sun.shadow.camera.top = 130;
+    sun.shadow.camera.bottom = -20;
     scene.add(sun);
 
     const lavaLight = new THREE.PointLight(0xff4400, 4, 35);
@@ -215,8 +272,8 @@ export default function FloorIsLava() {
     scene.add(lavaLight);
 
     // Apex spotlight to draw the eye upward
-    const apexLight = new THREE.PointLight(0xfde047, 3, 20);
-    apexLight.position.set(0, 72, 0);
+    const apexLight = new THREE.PointLight(0xfde047, 4, 30);
+    apexLight.position.set(0, 120, 0);
     scene.add(apexLight);
 
     // ── Platforms ─────────────────────────────────────────────────────────────

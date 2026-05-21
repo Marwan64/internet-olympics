@@ -140,7 +140,7 @@ const CPS: CPDef[] = [
   { id:2, trigX:2220, spawnX:2240, spawnY:GY-PH },
   { id:3, trigX:3230, spawnX:3250, spawnY:GY-PH },
   { id:4, trigX:4250, spawnX:4270, spawnY:GY-PH },
-  { id:5, trigX:6100, spawnX:6120, spawnY:GY-PH },
+  { id:5, trigX:6100, spawnX:6230, spawnY:GY-PH },
   { id:6, trigX:7800, spawnX:7820, spawnY:GY-PH },
 ];
 

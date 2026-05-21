@@ -49,21 +49,37 @@ const PLATFORMS = [
   { x: 6000, y: 360, w: 140, h: 20 },
 ];
 
-// All blocks positioned so player can be BELOW them to hit from underneath
+// All blocks placed exactly 80px above the player's head when standing on the
+// nearest ground/platform so every block is hittable with a single jump.
+// Formula: block.y = platform.y - PLAYER_H - 80 = platform.y - 128
+// From GROUND_Y (520): block.y = 520 - 128 = 392
 const QUESTION_BLOCKS = [
-  { id: 'b0', x: 130, y: 400, powerUp: 'speed' as const },
-  { id: 'b1', x: 720, y: 400, powerUp: 'speed' as const },
-  { id: 'b2', x: 1220, y: 400, powerUp: 'star' as const },
-  { id: 'b3', x: 1340, y: 200, powerUp: 'speed' as const },
-  { id: 'b4', x: 1740, y: 400, powerUp: 'speed' as const },
-  { id: 'b5', x: 2580, y: 160, powerUp: 'fire' as const },
-  { id: 'b6', x: 2740, y: 400, powerUp: 'speed' as const },
-  { id: 'b7', x: 3080, y: 190, powerUp: 'speed' as const },
-  { id: 'b8', x: 3740, y: 400, powerUp: 'fire' as const },
-  { id: 'b9', x: 4310, y: 180, powerUp: 'star' as const },
-  { id: 'b10', x: 5150, y: 340, powerUp: 'fire' as const },
-  { id: 'b11', x: 5700, y: 160, powerUp: 'star' as const },
-  { id: 'b12', x: 6000, y: 400, powerUp: 'speed' as const },
+  // b0 — above ground at start (easy intro block)
+  { id: 'b0', x: 140,  y: 392, powerUp: 'speed' as const },
+  // b1 — above platform (560, 360): 360-128=232
+  { id: 'b1', x: 590,  y: 232, powerUp: 'speed' as const },
+  // b2 — above ground between platforms (player runs through here)
+  { id: 'b2', x: 1200, y: 392, powerUp: 'star' as const },
+  // b3 — above platform (1300, 320): 320-128=192
+  { id: 'b3', x: 1340, y: 192, powerUp: 'speed' as const },
+  // b4 — above platform (1540, 390): 390-128=262
+  { id: 'b4', x: 1570, y: 262, powerUp: 'speed' as const },
+  // b5 — above platform (2300, 340): 340-128=212
+  { id: 'b5', x: 2330, y: 212, powerUp: 'fire' as const },
+  // b6 — above ground (runner just cruised off platform)
+  { id: 'b6', x: 2740, y: 392, powerUp: 'speed' as const },
+  // b7 — above platform (3060, 310): 310-128=182
+  { id: 'b7', x: 3090, y: 182, powerUp: 'speed' as const },
+  // b8 — above platform (3800, 410): 410-128=282
+  { id: 'b8', x: 3830, y: 282, powerUp: 'fire' as const },
+  // b9 — above platform (4300, 300): 300-128=172
+  { id: 'b9', x: 4330, y: 172, powerUp: 'star' as const },
+  // b10 — above platform (5080, 400): 400-128=272
+  { id: 'b10', x: 5100, y: 272, powerUp: 'fire' as const },
+  // b11 — above platform (5450, 260): 260-128=132  (high-skill reward)
+  { id: 'b11', x: 5470, y: 132, powerUp: 'star' as const },
+  // b12 — above platform (6000, 360): 360-128=232
+  { id: 'b12', x: 6020, y: 232, powerUp: 'speed' as const },
 ];
 
 // Piranha plants at these pipe positions (client-side time-based animation)

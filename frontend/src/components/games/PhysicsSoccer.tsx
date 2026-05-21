@@ -11,11 +11,11 @@ const AW = 40;
 const AH = 26;
 const GW = 8;
 const BALL_R_BASE = 1.1;
-const PL_R = 0.85;
-const PL_DRAG = 0.80;
-const PL_ACCEL = 34;
-const PL_MAX_SPD = 17;
-const PL_BOOST_SPD = 34;
+const PL_R = 0.9;
+const PL_DRAG = 0.91;
+const PL_ACCEL = 72;
+const PL_MAX_SPD = 24;
+const PL_BOOST_SPD = 48;
 const DT_CAP = 0.05;
 
 const TEAM_COLOR  = [0xef4444, 0x3b82f6] as const; // red, blue
@@ -280,31 +280,72 @@ export default function PhysicsSoccer() {
     shadowMesh.position.y = 0.05;
     scene.add(shadowMesh);
 
-    // ── Player meshes ─────────────────────────────────────────────────────────
+    // ── Player meshes — flat emoji discs ─────────────────────────────────────
     const playerMeshes = new Map<string, THREE.Group>();
+
+    function makeEmojiTexture(emoji: string, teamColor: number): THREE.CanvasTexture {
+      const size = 256;
+      const cv = document.createElement('canvas');
+      cv.width = size; cv.height = size;
+      const g = cv.getContext('2d')!;
+      // Team-colored filled circle
+      const hex = '#' + teamColor.toString(16).padStart(6, '0');
+      g.fillStyle = hex;
+      g.beginPath();
+      g.arc(size / 2, size / 2, size / 2 - 6, 0, Math.PI * 2);
+      g.fill();
+      // White border
+      g.strokeStyle = 'rgba(255,255,255,0.85)';
+      g.lineWidth = 10;
+      g.stroke();
+      // Inner ring (subtle depth)
+      g.strokeStyle = 'rgba(255,255,255,0.25)';
+      g.lineWidth = 4;
+      g.beginPath();
+      g.arc(size / 2, size / 2, size / 2 - 22, 0, Math.PI * 2);
+      g.stroke();
+      // Emoji centered
+      g.font = `${Math.round(size * 0.44)}px serif`;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(emoji, size / 2, size / 2 + 4);
+      return new THREE.CanvasTexture(cv);
+    }
 
     function getOrCreatePlayer(id: string, team: 0 | 1): THREE.Group {
       if (playerMeshes.has(id)) return playerMeshes.get(id)!;
-      const g    = new THREE.Group();
-      const col  = TEAM_COLOR[team];
-      const body = new THREE.Mesh(
-        new THREE.CylinderGeometry(PL_R * 0.9, PL_R * 0.9, 1.6, 10),
-        new THREE.MeshStandardMaterial({ color: col, roughness: 0.5 })
+      const g   = new THREE.Group();
+      const col = TEAM_COLOR[team];
+
+      // Look up this player's avatar from the room state
+      const room = useGameStore.getState().room;
+      const roomPlayer = room?.players.find(rp => rp.id === id);
+      const emoji = roomPlayer?.avatar ?? (team === 0 ? '🔴' : '🔵');
+
+      // Flat disc — visible from the top-down camera
+      const disc = new THREE.Mesh(
+        new THREE.CylinderGeometry(PL_R, PL_R, 0.38, 32),
+        new THREE.MeshStandardMaterial({
+          map: makeEmojiTexture(emoji, col),
+          roughness: 0.3,
+          metalness: 0.15,
+          emissive: new THREE.Color(col),
+          emissiveIntensity: 0.1,
+        })
       );
-      body.castShadow = true;
-      body.position.y = 0.8;
-      const head = new THREE.Mesh(
-        new THREE.SphereGeometry(PL_R * 0.75, 10, 8),
-        new THREE.MeshStandardMaterial({ color: col, roughness: 0.4, emissive: new THREE.Color(col), emissiveIntensity: 0.15 })
+      disc.castShadow = true;
+      disc.position.y = 0.19;
+      g.add(disc);
+
+      // Shadow ring on pitch
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(PL_R * 0.75, PL_R * 1.08, 32),
+        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25 })
       );
-      head.castShadow = true;
-      head.position.y = 1.9;
-      // Eyes
-      const eyeGeo = new THREE.SphereGeometry(0.12, 6, 6);
-      const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.4 });
-      const eL = new THREE.Mesh(eyeGeo, eyeMat); eL.position.set(-0.25, 1.96, -0.55);
-      const eR = new THREE.Mesh(eyeGeo, eyeMat); eR.position.set( 0.25, 1.96, -0.55);
-      g.add(body, head, eL, eR);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.01;
+      g.add(ring);
+
       scene.add(g);
       playerMeshes.set(id, g);
       return g;
@@ -505,10 +546,10 @@ export default function PhysicsSoccer() {
             }
           }
 
-          // Boost pulse on body
-          const body = g.children[0] as THREE.Mesh;
-          const mat  = body.material as THREE.MeshStandardMaterial;
-          const bi   = (isMe ? local.boosting : sp.boosting) ? 0.5 + 0.3 * Math.sin(now * 0.02) : 0.15;
+          // Boost pulse on disc
+          const disc = g.children[0] as THREE.Mesh;
+          const mat  = disc.material as THREE.MeshStandardMaterial;
+          const bi   = (isMe ? local.boosting : sp.boosting) ? 0.55 + 0.35 * Math.sin(now * 0.02) : 0.1;
           mat.emissive.set(TEAM_COLOR[sp.team]);
           mat.emissiveIntensity = bi;
         }
