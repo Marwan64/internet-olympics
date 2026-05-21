@@ -10,12 +10,12 @@ import { useSocketActions, getSocket } from '@/hooks/useSocket';
 const AW = 40;
 const AH = 26;
 const GW = 8;
-const BALL_R_BASE = 1.1;
-const PL_R = 0.9;
-const PL_DRAG = 0.91;
-const PL_ACCEL = 72;
-const PL_MAX_SPD = 24;
-const PL_BOOST_SPD = 48;
+const BALL_R_BASE = 0.7;
+const PL_R = 0.85;
+const PL_DRAG = 0.96;
+const PL_ACCEL = 55;
+const PL_MAX_SPD = 22;
+const PL_BOOST_SPD = 40;
 const DT_CAP = 0.05;
 
 const TEAM_COLOR  = [0xef4444, 0x3b82f6] as const; // red, blue
@@ -268,7 +268,7 @@ export default function PhysicsSoccer() {
       return new THREE.CanvasTexture(c);
     })();
     const glowSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
-    glowSprite.scale.set(5, 5, 1);
+    glowSprite.scale.set(3, 3, 1);
     scene.add(glowSprite);
 
     // Ball shadow blob

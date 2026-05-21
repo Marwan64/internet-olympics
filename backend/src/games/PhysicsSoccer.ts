@@ -17,18 +17,18 @@ const AH  = 26;  // total depth  (z: −13 → +13)
 const GW  = 8;   // goal mouth width (z span)
 
 // Ball
-const BALL_R_BASE = 1.1;
-const BALL_E      = 0.78;    // restitution on wall bounce
-const BALL_DRAG   = 0.992;
+const BALL_R_BASE = 0.7;
+const BALL_E      = 0.82;    // restitution on wall bounce
+const BALL_DRAG   = 0.994;
 const BALL_MASS   = 1;
 
 // Player
 const PL_R          = 0.85;
 const PL_MASS       = 3;
-const PL_ACCEL      = 52;
-const PL_MAX_SPD    = 17;
-const PL_BOOST_SPD  = 34;
-const PL_DRAG       = 0.80;
+const PL_ACCEL      = 55;
+const PL_MAX_SPD    = 22;
+const PL_BOOST_SPD  = 40;
+const PL_DRAG       = 0.96;   // per 60Hz tick — 0.96^60 ≈ 9% retention/s (snappy but controllable)
 const BOOST_DUR_MS  = 700;
 const BOOST_CD_MS   = 3800;
 const DASH_IMPULSE  = 25;

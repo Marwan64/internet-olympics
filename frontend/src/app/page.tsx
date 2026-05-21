@@ -342,7 +342,7 @@ function Hero({ activeIdx, progress, paused, onGoTo, onTogglePause, onCreateRoom
         </div>
 
         {/* Hero content */}
-        <div style={{ position:'relative', zIndex:4, padding:'56px 60px 28px',
+        <div style={{ position:'relative', zIndex:4, padding:'56px 60px 108px',
           display:'flex', flexDirection:'column', justifyContent:'space-between',
           minHeight:640, maxWidth:760 }}>
 
