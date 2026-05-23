@@ -1,7 +1,7 @@
 import { MetadataRoute } from 'next';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const base = 'https://internet-olympics-frontend.vercel.app';
+  const base = 'https://internetolympics.vercel.app';
 
   return [
     {

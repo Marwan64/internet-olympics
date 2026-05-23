@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   title: 'Internet Olympics — Chaotic Multiplayer Party Games',
   description: 'The most chaotic multiplayer party game platform. Play instantly with friends, no download required. Up to 50 players, streamer-ready, mobile-friendly.',
   keywords: ['party game', 'multiplayer', 'browser game', 'online game', 'friends', 'mario race', 'knockback arena', 'floor is lava', 'physics soccer'],
-  metadataBase: new URL('https://internet-olympics-frontend.vercel.app'),
+  metadataBase: new URL('https://internetolympics.vercel.app'),
   alternates: {
     canonical: '/',
   },
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     title: 'Internet Olympics — Chaotic Multiplayer Party Games',
     description: 'Play free multiplayer party games instantly in your browser. No download needed. Up to 50 players!',
     type: 'website',
-    url: 'https://internet-olympics-frontend.vercel.app',
+    url: 'https://internetolympics.vercel.app',
     siteName: 'Internet Olympics',
   },
   twitter: {

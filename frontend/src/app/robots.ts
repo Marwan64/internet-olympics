@@ -6,6 +6,6 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: '*',
       allow: '/',
     },
-    sitemap: 'https://internet-olympics-frontend.vercel.app/sitemap.xml',
+    sitemap: 'https://internetolympics.vercel.app/sitemap.xml',
   };
 }
