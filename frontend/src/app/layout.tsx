@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     canonical: '/',
   },
   verification: {
-    google: 'pcVS_vGLQEy0ZRJ7LnPtesENfhUShWe1niY_T7Bd_fQ',
+    google: ['pcVS_vGLQEy0ZRJ7LnPtesENfhUShWe1niY_T7Bd_fQ', '3m6PVCQFC5OAzHYhl15JAFPEjOvjH-w-fEHcAukajkw'],
   },
   robots: {
     index: true,
