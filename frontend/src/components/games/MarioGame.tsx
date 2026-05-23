@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useSocketActions, getSocket } from '@/hooks/useSocket';
+import { mario_jump, mario_blockHit, mario_powerUp, mario_stomp, mario_finish } from '@/hooks/useGameSounds';
 
 // ── Level constants (must match backend) ──────────────────────────────────────
 
@@ -602,6 +603,7 @@ export default function MarioGame() {
       if (data.playerId === myId) {
         finishedMsgRef.current = `🏁 You finished #${data.rank}! +${data.points} pts`;
         playerRef.current.finished = true;
+        mario_finish();
       }
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -697,6 +699,7 @@ export default function MarioGame() {
     if (inp.jump && p.onGround && !p.jumpPressed) {
       p.vy = JUMP_FORCE;
       p.onGround = false;
+      mario_jump();
     }
     p.jumpPressed = inp.jump;
 
@@ -776,6 +779,7 @@ export default function MarioGame() {
         if (!block.hit) {
           block.hit = true; // mark locally to prevent re-sends
           block.bounceAt = now;
+          mario_blockHit();
           sendInput('block_hit', { blockId: block.id });
         }
         continue;
@@ -805,6 +809,7 @@ export default function MarioGame() {
       const dx = Math.abs(p.x + PLAYER_W / 2 - (pu.x + 16));
       const dy = Math.abs(p.y + PLAYER_H / 2 - (pu.y + 16));
       if (dx < 32 && dy < 36) {
+        mario_powerUp();
         sendInput('powerup_collect', { powerUpId: pu.id });
         p.powerUp = pu.type;
         p.powerUpExpiry = now + 8000;
@@ -886,6 +891,7 @@ export default function MarioGame() {
         g.squishAt = now;
         p.vy = -380;
         p.y = goombaTop - PLAYER_H;
+        mario_stomp();
         sendInput('goomba_stomp', { goombaId: g.id });
       } else if (p.powerUp === 'star') {
         g.alive = false;

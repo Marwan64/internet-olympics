@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useSocketActions, getSocket } from '@/hooks/useSocket';
+import { arena_punch, arena_punchHit, arena_ko, arena_dash } from '@/hooks/useGameSounds';
 
 // ── Constants (must match backend) ────────────────────────────────────────────
 
@@ -105,17 +106,23 @@ export default function KnockbackArena() {
       if (snapshotsRef.current.length > 5) snapshotsRef.current.shift();
     };
 
+    const _myId = getSocket().id;
     const onPunch = (data: { id: string; facing: number; hits: string[] }) => {
       punchVfxRef.current.push({ id: data.id, facing: data.facing, at: performance.now() });
+      const hitMe = data.hits.includes(_myId ?? '');
+      if (data.hits.length > 0) { arena_punchHit(); } else { arena_punch(); }
       for (const h of data.hits) {
         koVfxRef.current.push({ id: h + '_hit', at: performance.now() });
+        if (hitMe) { /* already played punchHit */ }
       }
     };
     const onDash = (data: { id: string }) => {
       dashVfxRef.current.push({ id: data.id, at: performance.now(), trail: [] });
+      if (data.id === _myId) arena_dash();
     };
     const onKO = (data: { id: string; killer: string | null; livesLeft: number }) => {
       koVfxRef.current.push({ id: data.id, at: performance.now() });
+      arena_ko();
     };
 
     socket.on('arena:state', onState);

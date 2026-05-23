@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '@/store/gameStore';
 import { useSocketActions, getSocket } from '@/hooks/useSocket';
+import { cart_drift, cart_boost, cart_collision, cart_finish } from '@/hooks/useGameSounds';
 
 // ── Constants (must match backend) ────────────────────────────────────────────
 
@@ -164,6 +165,8 @@ export default function ShoppingCart() {
   const cartYawRef = useRef(0);          // smooth local yaw for rendering
   const particlesRef = useRef<Particle[]>([]);
   const forkMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
+
+  const wasBoostingRef = useRef(false); // track boost start for sound
 
   const sceneStateRef = useRef<{
     renderer: THREE.WebGLRenderer;
@@ -659,11 +662,12 @@ export default function ShoppingCart() {
     };
 
     const onFinish = (data: { id: string; rank: number; points: number }) => {
-      if (data.id === myId) finishMsgRef.current = `🏁 You finished #${data.rank}! +${data.points}`;
+      if (data.id === myId) { finishMsgRef.current = `🏁 You finished #${data.rank}! +${data.points}`; cart_finish(); }
     };
 
     const onCollision = () => {
       camShakeRef.current = Math.max(camShakeRef.current, 8);
+      cart_collision();
     };
 
     socket.on('cart:state', onState);
@@ -692,7 +696,7 @@ export default function ShoppingCart() {
       if ((k === 's' || k === 'arrowdown') && !inputRef.current.brake) { inputRef.current.brake = true; changed = true; }
       if ((k === 'a' || k === 'arrowleft') && !inputRef.current.left) { inputRef.current.left = true; changed = true; }
       if ((k === 'd' || k === 'arrowright') && !inputRef.current.right) { inputRef.current.right = true; changed = true; }
-      if ((k === 'shift' || k === 'x') && !inputRef.current.drift) { inputRef.current.drift = true; changed = true; }
+      if ((k === 'shift' || k === 'x') && !inputRef.current.drift) { inputRef.current.drift = true; changed = true; cart_drift(); }
       if (k === ' ') { e.preventDefault(); sendInput('cart_jump', {}); }
       if (changed) sendNow();
     };
@@ -830,7 +834,10 @@ export default function ShoppingCart() {
           spawnDriftSmoke(particlesRef.current, cart.x, cartVisY, cart.z, driftSide);
           if (cart.dc > 40) spawnDriftSparks(particlesRef.current, cart.x, cartVisY, cart.z);
         }
-        if (cart.bs || cart.db) {
+        const nowBoosting = !!(cart.bs || cart.db);
+        if (nowBoosting && !wasBoostingRef.current) cart_boost();
+        wasBoostingRef.current = nowBoosting;
+        if (nowBoosting) {
           spawnBoostFlame(particlesRef.current, cart.x, cartVisY, cart.z);
         }
       }

@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore, useGameState } from '@/store/gameStore';
 import { useSocketActions, getSocket } from '@/hooks/useSocket';
+import { lava_batSwing, lava_jump, lava_death, lava_hitPlayer } from '@/hooks/useGameSounds';
 
 // ── Physics constants ─────────────────────────────────────────────────────────
 const GRAVITY     = 18;   // units/s² downward
@@ -610,6 +611,7 @@ export default function FloorIsLava() {
             ps.vel.y = chaosState.lowGravity ? JUMP_VEL * 1.5 : JUMP_VEL;
             ps.onGround = false;
             ps.coyoteMs = 0;
+            lava_jump();
           }
         }
         spaceWas = keys.space;
@@ -628,7 +630,7 @@ export default function FloorIsLava() {
               const d = ghost.position.distanceTo(playerGroup.position);
               if (d < closestDist) { closestDist = d; closest = ghostId; }
             }
-            if (closest) sendInput('lava_bat', { targetId: closest });
+            if (closest) { sendInput('lava_bat', { targetId: closest }); lava_hitPlayer(); }
           }
           if (batState.t >= 0.35) {
             batState.swinging = false;
@@ -648,6 +650,7 @@ export default function FloorIsLava() {
             batState.swinging = true;
             batState.t = 0;
             batState.hitSent = false;
+            lava_batSwing();
           }
         }
         fWas = keys.f;
@@ -707,6 +710,7 @@ export default function FloorIsLava() {
           isEliminated = true;
           ps.alive = false;
           setEliminated(true);
+          lava_death();
           sendInput('lava_die', {});
         }
 

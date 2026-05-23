@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore, useGameState } from '@/store/gameStore';
 import { useSocketActions, getSocket } from '@/hooks/useSocket';
+import { soccer_kick, soccer_goal, soccer_dash, soccer_wallHit } from '@/hooks/useGameSounds';
 
 // ── Arena constants (must match backend) ──────────────────────────────────────
 const AW = 40;
@@ -424,6 +425,7 @@ export default function PhysicsSoccer() {
 
     const onGoal = (data: { team: 0 | 1; score: [number, number] }) => {
       setScore(data.score);
+      soccer_goal();
       const msg = data.team === local.team ? '⚽ GOAL!' : '😬 THEY SCORED!';
       setGoalBanner({ team: data.team, msg });
       setTimeout(() => setGoalBanner(null), 2200);
@@ -444,6 +446,7 @@ export default function PhysicsSoccer() {
 
     // ── Camera shake state ────────────────────────────────────────────────────
     let shakeAmt = 0;
+    let lastKickSound = 0; // debounce kick sfx
 
     // ── Game loop ─────────────────────────────────────────────────────────────
     const clock = new THREE.Clock(true);
@@ -474,6 +477,7 @@ export default function PhysicsSoccer() {
         if (isDash) pendingDash = true;
 
         if (isDash && now > boostCDUntil) {
+          soccer_dash();
           local.boosting = true;
           local.boostUntil = now + 700;
           boostCDUntil = now + 3800;
@@ -518,6 +522,22 @@ export default function PhysicsSoccer() {
         ballMesh.position.set(bx, br, bz);
         ballMesh.rotation.y += snap.ball.spin * dt;
         ballMesh.rotation.x += Math.hypot(snap.ball.vx, snap.ball.vz) * 0.05;
+
+        // Kick sound: local player close to ball and moving fast toward it
+        if (local.assigned) {
+          const ballSpd = Math.hypot(snap.ball.vx, snap.ball.vz);
+          const distToBall = Math.hypot(local.x - bx, local.z - bz);
+          const playerSpd = Math.hypot(local.vx, local.vz);
+          if (distToBall < PL_R + BALL_R_BASE + 0.4 && ballSpd > 8 && playerSpd > 4 && performance.now() - lastKickSound > 350) {
+            soccer_kick();
+            lastKickSound = performance.now();
+          }
+          // Wall hit sound for ball
+          if ((Math.abs(bx) > AW / 2 - BALL_R_BASE - 0.2 || Math.abs(bz) > AH / 2 - BALL_R_BASE - 0.2) && ballSpd > 3 && performance.now() - lastKickSound > 200) {
+            soccer_wallHit();
+            lastKickSound = performance.now();
+          }
+        }
         // Scale ball mesh if giant_ball
         const scale = br / BALL_R_BASE;
         ballMesh.scale.setScalar(scale);

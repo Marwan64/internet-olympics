@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useSocketActions, getSocket } from '@/hooks/useSocket';
+import { obby_jump, obby_death, obby_checkpoint, obby_spikeDeath } from '@/hooks/useGameSounds';
 
 // ── World constants ──────────────────────────────────────────────────────────────
 
@@ -274,8 +275,10 @@ export default function RageObby() {
       if (jumpJust) {
         if (s.onGround || s.coyoteMs > 0) {
           s.vy = JUMP_VEL; s.onGround = false; s.coyoteMs = 0; s.jumpsLeft = 1;
+          obby_jump();
         } else if (s.jumpsLeft > 0) {
           s.vy = JUMP_VEL * 0.60; s.jumpsLeft = 0;
+          obby_jump();
         }
       }
 
@@ -352,6 +355,7 @@ export default function RageObby() {
 
       // ── Kill: fall or spike ──
       let died = s.y + PH > KILL_Y;
+      let diedByFall = died;
       if (!died) {
         for (const sp of SPIKES) {
           if (aabb(s.x + 3, s.y + 3, PW - 6, PH - 6, sp.x, sp.y, sp.w, sp.h)) { died = true; break; }
@@ -368,6 +372,7 @@ export default function RageObby() {
       if (died) {
         s.deaths++;
         s.flashMs = 280;
+        if (diedByFall) { obby_death(); } else { obby_spikeDeath(); }
         sendInput('obby_death', {});
         const cp = CPS[s.checkpoint];
         s.x = cp.spawnX; s.y = cp.spawnY;
@@ -380,6 +385,7 @@ export default function RageObby() {
         for (const cp of CPS) {
           if (cp.id > s.checkpoint && s.x + PW >= cp.trigX) {
             s.checkpoint = cp.id;
+            obby_checkpoint();
             sendInput('obby_checkpoint', { id: cp.id });
           }
         }
