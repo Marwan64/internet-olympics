@@ -1,7 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useSounds } from '@/hooks/useSounds';
 import { useGameStore, useGameState, useActiveChaos } from '@/store/gameStore';
 import MarioGame from './MarioGame';
 import KnockbackArena from './KnockbackArena';
@@ -223,6 +224,24 @@ export default function GameScreen() {
   const activeChaos = useActiveChaos();
   const { leaveRoom } = useSocketActions();
   const totalTimeRef = React.useRef<number>(180);
+  const sounds = useSounds();
+  const [streamer, setStreamer] = useState(() =>
+    typeof window !== 'undefined' ? localStorage.getItem('io_streamer') === '1' : false
+  );
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'F9') {
+        setStreamer(prev => {
+          const next = !prev;
+          localStorage.setItem('io_streamer', next ? '1' : '0');
+          return next;
+        });
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   void leaveRoom; // available if needed
 
@@ -231,6 +250,16 @@ export default function GameScreen() {
   // Capture the max timeRemaining seen as the total duration for the progress bar
   if (gameState.timeRemaining > totalTimeRef.current || gameState.phase === 'intro') {
     totalTimeRef.current = Math.max(gameState.timeRemaining, 1);
+  }
+
+  // Sound: tick on last 5s, game start fanfare
+  const prevPhaseRef = React.useRef(gameState.phase);
+  if (gameState.phase === 'playing' && prevPhaseRef.current === 'intro') {
+    sounds.gameStart();
+  }
+  prevPhaseRef.current = gameState.phase;
+  if (gameState.phase === 'playing' && gameState.timeRemaining <= 5 && gameState.timeRemaining > 0) {
+    void sounds.tick(gameState.timeRemaining === 1);
   }
 
   const isPlaying  = gameState.phase === 'playing';
@@ -266,18 +295,32 @@ export default function GameScreen() {
             <TimerBar timeRemaining={gameState.timeRemaining} totalTime={totalTime} />
           </div>
 
-          {/* Game counter */}
-          <div style={{ textAlign:'right' }}>
+          {/* Game counter + streamer toggle */}
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            {streamer && (
+              <span style={{ fontFamily:FONT_MONO, fontSize:10, padding:'3px 8px', borderRadius:999,
+                background:'rgba(236,72,153,0.2)', border:'1px solid rgba(236,72,153,0.5)',
+                color:'#EC4899', letterSpacing:'0.1em', textTransform:'uppercase' }}>
+                ● LIVE
+              </span>
+            )}
             <div style={{ fontFamily:FONT_MONO, fontSize:11, color: T.ink3, textTransform:'uppercase', letterSpacing:'0.1em' }}>
               Game {gameState.gameNumber}/{gameState.totalGames}
             </div>
+            <button onClick={() => setStreamer(s => { const n=!s; localStorage.setItem('io_streamer',n?'1':'0'); return n; })}
+              title="Toggle Streamer Mode (F9)"
+              style={{ background:'none', border:`1px solid ${T.line}`, borderRadius:6, padding:'3px 8px',
+                cursor:'pointer', fontFamily:FONT_MONO, fontSize:10, color: streamer ? '#EC4899' : T.ink3,
+                letterSpacing:'0.06em', transition:'color .2s' }}>
+              📡 {streamer ? 'Exit' : 'Stream'}
+            </button>
           </div>
         </div>
       </div>
 
       {/* Main layout */}
-      <div style={{ maxWidth:1100, margin:'0 auto', padding:'12px 16px 16px', display:'grid', gridTemplateColumns:'1fr', gap:12 }} className="gs-layout">
-        <style>{`@media(min-width:900px){.gs-layout{grid-template-columns:1fr 220px !important;}}`}</style>
+      <div style={{ maxWidth:streamer ? '100%' : 1100, margin:'0 auto', padding:'12px 16px 16px', display:'grid', gridTemplateColumns:'1fr', gap:12 }} className={`gs-layout${streamer ? ' streamer-mode' : ''}`}>
+        <style>{`@media(min-width:900px){.gs-layout:not(.streamer-mode){grid-template-columns:1fr 220px !important;}}`}</style>
 
         {/* Game area */}
         <div>
@@ -311,11 +354,11 @@ export default function GameScreen() {
           </AnimatePresence>
         </div>
 
-        {/* Sidebar leaderboard */}
-        <div className="gs-panel" style={{ borderRadius:16, padding:14, alignSelf:'start', position:'sticky', top:8 }}>
+        {/* Sidebar leaderboard — hidden in streamer mode */}
+        {!streamer && <div className="gs-panel" style={{ borderRadius:16, padding:14, alignSelf:'start', position:'sticky', top:8 }}>
           <p style={{ fontFamily:FONT_MONO, fontSize:10, color: T.ink3, textTransform:'uppercase', letterSpacing:'0.16em', marginBottom:10 }}>Scores</p>
           <MiniLeaderboard gameState={gameState} />
-        </div>
+        </div>}
       </div>
 
       <ToastContainer />

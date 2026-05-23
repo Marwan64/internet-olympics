@@ -449,10 +449,24 @@ export default function LobbyRoom() {
             {/* Share link */}
             <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:.08 }}
               style={{ background: T.paper, border:`1px solid ${T.line}`, borderRadius:16, padding:16 }}>
-              <p style={{ margin:'0 0 4px', fontSize:11, color: T.ink3, fontFamily:FONT_MONO, textTransform:'uppercase', letterSpacing:'0.12em' }}>Share link</p>
-              <p style={{ fontFamily:FONT_MONO, fontSize:12, color: T.lake, wordBreak:'break-all', margin:0 }}>
-                {typeof window !== 'undefined' ? `${window.location.origin}?join=${room.code}` : `...?join=${room.code}`}
-              </p>
+              <p style={{ margin:'0 0 8px', fontSize:11, color: T.ink3, fontFamily:FONT_MONO, textTransform:'uppercase', letterSpacing:'0.12em' }}>Share invite link</p>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <p style={{ fontFamily:FONT_MONO, fontSize:12, color: T.lake, wordBreak:'break-all', margin:0, flex:1 }}>
+                  {typeof window !== 'undefined' ? `${window.location.origin}/join/${room.code}` : `internetolympics.vercel.app/join/${room.code}`}
+                </p>
+                <button onClick={() => {
+                  navigator.clipboard.writeText(typeof window !== 'undefined' ? `${window.location.origin}/join/${room.code}` : '');
+                  setCopied(true); setTimeout(() => setCopied(false), 2000);
+                }} className="lobby-btn" style={{
+                  padding:'7px 14px', borderRadius:999, flexShrink:0,
+                  background: copied ? `${T.leaf}22` : T.bg2,
+                  border:`1px solid ${copied ? T.leaf : T.line}`,
+                  color: copied ? T.leaf : T.ink2, fontFamily:FONT_MONO, fontSize:11,
+                  cursor:'pointer', transition:'all .2s',
+                }}>
+                  {copied ? '✅ Copied!' : '🔗 Copy link'}
+                </button>
+              </div>
             </motion.div>
 
             {/* Game picker */}

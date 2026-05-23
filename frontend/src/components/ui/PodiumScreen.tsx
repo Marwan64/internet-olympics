@@ -1,10 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/store/gameStore';
 import { useSocketActions } from '@/hooks/useSocket';
 import { PlayerResult } from '@/types';
 import ToastContainer from './ToastContainer';
+import { useSounds } from '@/hooks/useSounds';
 
 const T = {
   bg:      '#0A0A12',
@@ -28,12 +30,97 @@ const RANK_ACCENT = [T.gold, T.ink3, '#B45309'];
 const RANK_HEIGHTS = [192, 140, 112];
 const RANK_EMOJI = ['🥇','🥈','🥉'];
 
+async function shareResults(players: PlayerResult[], champion: PlayerResult | null) {
+  const W = 600, H = 380;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+
+  // Background
+  ctx.fillStyle = '#0A0A12';
+  ctx.fillRect(0, 0, W, H);
+
+  // Subtle gradient overlay
+  const grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, 'rgba(255,77,45,0.08)');
+  grad.addColorStop(1, 'rgba(236,72,153,0.08)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Header
+  ctx.fillStyle = '#F4F4F6';
+  ctx.font = 'bold 22px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('🏆  INTERNET OLYMPICS', W / 2, 50);
+
+  ctx.fillStyle = '#8A8DA0';
+  ctx.font = '13px monospace';
+  ctx.fillText('FINAL RESULTS', W / 2, 74);
+
+  // Divider
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(40, 90); ctx.lineTo(W - 40, 90); ctx.stroke();
+
+  // Players (top 5)
+  const top5 = players.slice(0, 5);
+  const medals = ['🥇','🥈','🥉','4.','5.'];
+  const accentColors = ['#F59E0B','#8A8DA0','#B45309','#CDCFD7','#5B5E70'];
+  top5.forEach((p, i) => {
+    const y = 120 + i * 46;
+    // Row bg for top 3
+    if (i < 3) {
+      ctx.fillStyle = `rgba(255,255,255,0.03)`;
+      ctx.beginPath();
+      (ctx as CanvasRenderingContext2D & { roundRect: (x:number,y:number,w:number,h:number,r:number)=>void })
+        .roundRect?.(40, y - 18, W - 80, 38, 8);
+      ctx.fill();
+    }
+    ctx.font = '20px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(medals[i], 54, y + 8);
+    ctx.font = `${i === 0 ? 'bold ' : ''}16px sans-serif`;
+    ctx.fillStyle = i === 0 ? '#F4F4F6' : '#CDCFD7';
+    ctx.fillText(`${p.avatar}  ${p.username}`, 96, y + 8);
+    ctx.fillStyle = accentColors[i];
+    ctx.font = 'bold 15px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(p.totalScore.toLocaleString() + ' pts', W - 54, y + 8);
+  });
+
+  // Footer
+  ctx.fillStyle = 'rgba(255,255,255,0.1)';
+  ctx.fillRect(0, H - 50, W, 1);
+  ctx.fillStyle = '#5B5E70';
+  ctx.font = '13px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('internetolympics.vercel.app', W / 2, H - 18);
+
+  canvas.toBlob(async (blob) => {
+    if (!blob) return;
+    const file = new File([blob], 'internet-olympics-results.png', { type: 'image/png' });
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Internet Olympics Results', text: `${champion?.username ?? 'Someone'} won! Come play 👇` });
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'internet-olympics-results.png'; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  }, 'image/png');
+}
+
 export default function PodiumScreen() {
   const podiumData = useGameStore((s) => s.podiumData);
   const playerId   = useGameStore((s) => s.playerId);
   const { leaveRoom } = useSocketActions();
+  const sounds = useSounds();
+  const [sharing, setSharing] = useState(false);
 
   if (!podiumData) return null;
+
+  // Play win fanfare once on mount
+  void (typeof window !== 'undefined' && setTimeout(() => sounds.win(), 600));
 
   const top3  = podiumData.players.slice(0, 3);
   const rest  = podiumData.players.slice(3);
@@ -171,6 +258,21 @@ export default function PodiumScreen() {
         {/* Buttons */}
         <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:1 }}
           style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12 }}>
+
+          {/* Share result */}
+          <button onClick={async () => {
+            if (sharing) return;
+            setSharing(true); sounds.copy();
+            await shareResults(podiumData.players, podiumData.champion ?? null);
+            setSharing(false);
+          }} className="pod-btn" style={{
+            display:'inline-flex', alignItems:'center', gap:8, padding:'10px 22px',
+            borderRadius:999, border:`1px solid ${T.lineStr}`, cursor:'pointer',
+            background:'rgba(255,255,255,0.05)', color: T.ink2,
+            fontFamily: D.display, fontWeight:600, fontSize:13,
+          }}>
+            {sharing ? '⏳ Generating…' : '📸 Share Results'}
+          </button>
 
           <a href="https://cash.app/$MarMar642" target="_blank" rel="noopener noreferrer" className="pod-btn"
             style={{

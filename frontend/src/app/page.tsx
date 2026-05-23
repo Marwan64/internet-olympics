@@ -9,6 +9,7 @@ import LobbyRoom from '@/components/lobby/LobbyRoom';
 import GameScreen from '@/components/games/GameScreen';
 import PodiumScreen from '@/components/ui/PodiumScreen';
 import ToastContainer from '@/components/ui/ToastContainer';
+import { useSounds } from '@/hooks/useSounds';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const T = {
@@ -107,8 +108,11 @@ export default function HomePage() {
 
 // ── Home ──────────────────────────────────────────────────────────────────────
 function HomeContent() {
-  const [flow, setFlow] = useState<FlowStep>('home');
+  const [flow, setFlow]         = useState<FlowStep>('home');
+  const [pendingCode, setPendingCode] = useState('');
   const [accent, setAccent] = useState(T.lava);
+  const [musicOn, setMusicOn]   = useState(false);
+  const sounds = useSounds();
   const [activeIdx, setActiveIdx] = useState(0);
   const [paused, setPaused] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -151,6 +155,17 @@ function HomeContent() {
     setPaused(p => { pausedRef.current = !p; return !p; });
   };
 
+  // Handle ?code= invite links
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (code) {
+      setPendingCode(code.toUpperCase());
+      setFlow('join');
+      window.history.replaceState({}, '', '/');
+    }
+  }, []);
+
   return (
     <div style={{ background: T.bg, color: T.ink, minHeight: '100vh', overflowX: 'hidden',
       fontFamily: FONT_DISPLAY, WebkitFontSmoothing: 'antialiased' }}>
@@ -183,7 +198,13 @@ function HomeContent() {
         backgroundImage:`url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.4'/></svg>")`,
       }} />
 
-      <Nav onCreateRoom={() => setFlow('setup')} onJoin={() => setFlow('join')} accent={accent} />
+      <Nav
+        onCreateRoom={() => { sounds.click(); setFlow('setup'); }}
+        onJoin={() => { sounds.click(); setFlow('join'); }}
+        accent={accent}
+        musicOn={musicOn}
+        onToggleMusic={() => { const on = sounds.toggleMusic(); setMusicOn(on); }}
+      />
 
       <Hero
         activeIdx={activeIdx} progress={progress} paused={paused}
@@ -192,7 +213,8 @@ function HomeContent() {
         accent={accent}
       />
 
-      <GamesSection onCreateRoom={() => setFlow('setup')} />
+      <GamesSection onCreateRoom={() => { sounds.click(); setFlow('setup'); }} />
+      <GameDescriptionsSection />
       <LiveSection />
       <HowItWorks />
       <CtaSection onCreateRoom={() => setFlow('setup')} onJoin={() => setFlow('join')} />
@@ -218,7 +240,7 @@ function HomeContent() {
               transition={{ type:'spring', stiffness:280, damping:24 }}
               style={{ width:'100%', maxWidth:440 }}
             >
-              <SetupFlow onBack={() => setFlow('home')} mode={flow === 'setup' ? 'create' : 'join'} />
+              <SetupFlow onBack={() => setFlow('home')} mode={flow === 'setup' ? 'create' : 'join'} initialCode={pendingCode} />
             </motion.div>
           </motion.div>
         )}
@@ -228,7 +250,7 @@ function HomeContent() {
 }
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
-function Nav({ onCreateRoom, onJoin, accent }: { onCreateRoom:()=>void; onJoin:()=>void; accent:string }) {
+function Nav({ onCreateRoom, onJoin, accent, musicOn, onToggleMusic }: { onCreateRoom:()=>void; onJoin:()=>void; accent:string; musicOn:boolean; onToggleMusic:()=>void }) {
   return (
     <nav style={{ position:'sticky', top:0, zIndex:50, backdropFilter:'blur(14px) saturate(140%)',
       background:'rgba(10,10,18,0.8)', borderBottom:`1px solid ${T.line}` }}>
@@ -260,6 +282,14 @@ function Nav({ onCreateRoom, onJoin, accent }: { onCreateRoom:()=>void; onJoin:(
 
         {/* CTAs */}
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          {/* Music toggle */}
+          <button onClick={onToggleMusic} title={musicOn ? 'Mute music' : 'Play ambient music'}
+            style={{ background:'none', border:`1px solid ${T.line}`, borderRadius:999,
+              width:34, height:34, display:'inline-flex', alignItems:'center', justifyContent:'center',
+              cursor:'pointer', fontSize:15, color: musicOn ? accent : T.ink3,
+              transition:'color .2s, border-color .2s' }}>
+            {musicOn ? '🔊' : '🔇'}
+          </button>
           <span style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'4px 10px 4px 8px',
             borderRadius:999, background:'rgba(255,255,255,0.05)', border:`1px solid ${T.line}`,
             fontFamily:FONT_MONO, fontSize:11, color:T.ink2 }}>
@@ -561,6 +591,86 @@ const LIVE_ROOMS = [
 ];
 const AV_COLORS = [T.lava,T.mario,T.soc,T.cart,T.obby,T.knock,'#22D3EE'];
 
+// ── SEO Game Descriptions ─────────────────────────────────────────────────────
+const GAME_DETAILS = [
+  { key:'lava',  color:T.lava,  emoji:'🌋', name:'Floor is Lava',
+    tagline:'The lava rises. The platforms disappear. One player survives.',
+    body:'Floor is Lava is a browser-based survival platformer for 2–16 players. As molten lava floods the arena from below, everyone scrambles to claim higher ground on a towering structure of platforms. Bat mechanics let you knock rivals into the lava. Moving platforms and chaos power-ups mean no two rounds are the same. Rounds last 3 minutes — long enough for a comeback, short enough to immediately rematch.',
+    bullets:['2–16 players','3-minute rounds','Bat knockback mechanic','Runs entirely in your browser'],
+  },
+  { key:'soc',   color:T.soc,   emoji:'⚽', name:'Physics Soccer',
+    tagline:'Rocket physics. No fouls. Pure chaos on a postage-stamp pitch.',
+    body:'Physics Soccer is a multiplayer browser soccer game with fully momentum-based physics. Emoji disc players slide and collide realistically — every touch, dash, and wall bounce feels satisfying. Rocket-boost dashes let you cross the pitch in a flash or slam a shot at goal. Play 2v2 up to 6v6 in 3-minute matches that somehow always go down to the wire.',
+    bullets:['4–12 players','Team-based 3-minute matches','Boost dash mechanic','Momentum-based physics'],
+  },
+  { key:'obby',  color:T.obby,  emoji:'😤', name:'Rage Obby',
+    tagline:'Spike pits. Disappearing tiles. Spinning blades. Good luck.',
+    body:'Rage Obby is a brutal browser obstacle course game for 1–10 players. Jump across color-coded platforms, dodge spinning blades, time your leaps over disappearing tiles, and cling onto moving ledges. Die and you respawn at your last checkpoint — not the start. The first player to reach the end wins, but the real goal is outlasting your friends\' patience.',
+    bullets:['1–10 players','Checkpoint system','4-minute time limit','No download required'],
+  },
+  { key:'mario', color:T.mario, emoji:'🍄', name:'Mario Race',
+    tagline:'Karts, power-ups, star mode, fireballs — first to the flag wins.',
+    body:'Mario Race is a browser-based kart racing platformer for 2–12 players, inspired by classic Nintendo games. Hit ? blocks to grab speed boosts, star power, and fireballs. Stomp rivals to slow them down. The course is packed with Goombas, pipes, and platforms. First player to cross the finish line wins — but power-ups can flip the lead at any moment.',
+    bullets:['2–12 players','Power-up blocks','3-minute race','Classic platformer feel'],
+  },
+  { key:'knock', color:T.knock, emoji:'👊', name:'Knockback Arena',
+    tagline:'No health bars. Punch friends off a tiny platform. Ring out and lose.',
+    body:'Knockback Arena is a minimalist browser fighting game for 2–8 players, inspired by Super Smash Bros. There are no health bars — instead, every punch and dash sends opponents flying with physics-based knockback. Fall off the platform edges and you\'re eliminated. The last player standing wins. Fast-paced 2-minute rounds mean you\'ll be playing best-of-five before you know it.',
+    bullets:['2–8 players','2-minute rounds','Physics knockback','Last player standing wins'],
+  },
+  { key:'cart',  color:T.cart,  emoji:'🛒', name:'Shopping Cart Racing',
+    tagline:'Wobbly carts, slippery aisles, milk on the floor. First to checkout wins.',
+    body:'Shopping Cart Racing is a chaotic browser racing game set inside a grocery store. Up to 16 players pilot unstable shopping carts through slippery aisles, attempting drifts around corners, boosting off ramps, and knocking rivals into shelves. Collect boost pick-ups, master the drift mechanic, and reach the checkout counter before everyone else in 3-minute races.',
+    bullets:['2–16 players','Drift boost mechanic','3-minute races','Up to 16 players'],
+  },
+];
+
+function GameDescriptionsSection() {
+  return (
+    <section style={{ maxWidth:1440, margin:'0 auto', padding:'80px 28px 0', position:'relative', zIndex:3 }}>
+      <div style={{ fontFamily:FONT_MONO, fontSize:11, color:T.ink3, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:12 }}>// game guides</div>
+      <h2 style={{ fontFamily:FONT_DISPLAY, fontWeight:800, fontSize:'clamp(28px,3.5vw,40px)', color:T.ink, letterSpacing:'-0.03em', margin:'0 0 48px' }}>
+        Everything you need to know
+      </h2>
+      <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
+        {GAME_DETAILS.map((g, i) => (
+          <article key={g.key} style={{
+            display:'grid', gridTemplateColumns:'1fr 1fr', gap:'48px 64px',
+            padding:'48px 0', borderTop:`1px solid ${T.line}`,
+            direction: i % 2 === 0 ? 'ltr' : 'rtl',
+          }}>
+            <style>{`@media(max-width:720px){.gdesc-grid{grid-template-columns:1fr!important;direction:ltr!important;}}`}</style>
+            <div className="gdesc-grid" style={{ direction:'ltr' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+                <span style={{ fontSize:32 }}>{g.emoji}</span>
+                <div style={{ width:4, height:40, borderRadius:2, background:g.color }} />
+                <h3 style={{ fontFamily:FONT_DISPLAY, fontWeight:800, fontSize:'clamp(22px,2.5vw,30px)', color:T.ink, margin:0, letterSpacing:'-0.025em' }}>{g.name}</h3>
+              </div>
+              <p style={{ fontFamily:FONT_DISPLAY, fontStyle:'italic', fontSize:16, color:g.color, margin:'0 0 14px', fontWeight:500 }}>{g.tagline}</p>
+              <p style={{ color:T.ink2, fontSize:15, lineHeight:1.7, margin:'0 0 20px' }}>{g.body}</p>
+              <ul style={{ listStyle:'none', padding:0, margin:0, display:'flex', flexWrap:'wrap', gap:8 }}>
+                {g.bullets.map(b => (
+                  <li key={b} style={{ fontFamily:FONT_MONO, fontSize:11, color:g.color,
+                    background:`${g.color}14`, border:`1px solid ${g.color}44`,
+                    borderRadius:999, padding:'4px 12px', letterSpacing:'0.06em' }}>{b}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="gdesc-grid" style={{ direction:'ltr', background:T.surface, borderRadius:20,
+              border:`1px solid ${T.line}`, display:'flex', alignItems:'center', justifyContent:'center',
+              minHeight:200, overflow:'hidden', position:'relative' }}>
+              <img src={`/${g.key === 'lava' ? 'floor-is-lava' : g.key === 'soc' ? 'soccer' : g.key === 'obby' ? 'rage-obby' : g.key === 'mario' ? 'mario-race' : g.key === 'knock' ? 'knockback-arena' : 'shopping-cart-racing'}.png`}
+                alt={`${g.name} gameplay screenshot`}
+                style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center', display:'block', minHeight:200 }} />
+              <div style={{ position:'absolute', inset:0, background:`linear-gradient(135deg, ${g.color}22 0%, transparent 60%)`, pointerEvents:'none' }} />
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function LiveSection() {
   return (
     <section id="live" style={{ maxWidth:1440, margin:'0 auto', padding:'96px 28px 0', position:'relative', zIndex:3 }}>
@@ -781,13 +891,14 @@ function FootCol({ title, links }: { title:string; links:{ label:string; fn?:()=
 }
 
 // ── Setup flow (create / join modal) ─────────────────────────────────────────
-function SetupFlow({ onBack, mode }: { onBack: () => void; mode: 'create' | 'join' }) {
+function SetupFlow({ onBack, mode, initialCode = '' }: { onBack: () => void; mode: 'create' | 'join'; initialCode?: string }) {
   const { createRoom, joinRoom } = useSocket();
   const isConnected = useGameStore((s) => s.connection.connected);
+  const sounds = useSounds();
   const [username, setUsername] = useState(useGameStore.getState().playerName);
   const [avatar, setAvatar]     = useState(useGameStore.getState().playerAvatar);
   const [color, setColor]       = useState(useGameStore.getState().playerColor);
-  const [roomCode, setRoomCode] = useState('');
+  const [roomCode, setRoomCode] = useState(initialCode);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
   const addToast = useGameStore((s) => s.addToast);
@@ -802,6 +913,7 @@ function SetupFlow({ onBack, mode }: { onBack: () => void; mode: 'create' | 'joi
     if (mode === 'join' && roomCode.trim().length < 4) { setError('Enter a valid room code!'); return; }
     setLoading(true); setError('');
     setPlayerName(username.trim()); setPlayerAvatar(avatar); setPlayerColor(color);
+    sounds.confirm();
     try {
       if (mode === 'create') {
         await createRoom(username.trim(), avatar, color);
