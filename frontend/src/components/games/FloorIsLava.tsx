@@ -347,6 +347,26 @@ export default function FloorIsLava() {
     eyeR.position.set( 0.15, 1.32, -0.31);
     playerGroup.add(bodyMesh, headMesh, eyeL, eyeR);
 
+    // YOU label sprite — floats above player's head
+    const youLabelCv = document.createElement('canvas');
+    youLabelCv.width = 160; youLabelCv.height = 52;
+    const youCtx = youLabelCv.getContext('2d')!;
+    youCtx.fillStyle = 'rgba(0,0,0,0.55)';
+    youCtx.beginPath();
+    (youCtx as CanvasRenderingContext2D & { roundRect: (x:number,y:number,w:number,h:number,r:number)=>void })
+      .roundRect?.(4, 4, 152, 44, 12);
+    youCtx.fill();
+    youCtx.font = 'bold 26px sans-serif';
+    youCtx.fillStyle = '#ffffff';
+    youCtx.textAlign = 'center';
+    youCtx.textBaseline = 'middle';
+    youCtx.fillText('YOU ▼', 80, 26);
+    const youTex = new THREE.CanvasTexture(youLabelCv);
+    const youSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: youTex, transparent: true, depthTest: false }));
+    youSprite.scale.set(2.5, 0.8, 1);
+    youSprite.position.set(0, 2.4, 0);
+    playerGroup.add(youSprite);
+
     // Bat — wooden cylinder held at player's right side
     const batPivot = new THREE.Group();
     batPivot.position.set(0, 0.5, 0);
@@ -724,6 +744,12 @@ export default function FloorIsLava() {
         playerGroup.position.copy(ps.pos);
         playerGroup.rotation.y = ps.yaw;
         playerGroup.visible = true;
+
+        // Pulse YOU sprite opacity
+        const youSpr = playerGroup.children.find(c => c instanceof THREE.Sprite) as THREE.Sprite | undefined;
+        if (youSpr) {
+          (youSpr.material as THREE.SpriteMaterial).opacity = 0.55 + 0.45 * Math.sin(now * 0.004);
+        }
 
         // Shadow blob on ground
         blobMesh.position.set(ps.pos.x, lavaY + 0.01, ps.pos.z);

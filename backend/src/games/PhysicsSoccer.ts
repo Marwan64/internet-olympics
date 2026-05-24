@@ -25,13 +25,13 @@ const BALL_MASS   = 1;
 // Player
 const PL_R          = 0.85;
 const PL_MASS       = 3;
-const PL_ACCEL      = 55;
+const PL_ACCEL      = 100;    // was 55 — faster acceleration = snappier feel
 const PL_MAX_SPD    = 22;
 const PL_BOOST_SPD  = 40;
-const PL_DRAG       = 0.96;   // per 60Hz tick — 0.96^60 ≈ 9% retention/s (snappy but controllable)
+const PL_DRAG       = 0.91;   // was 0.96 — 0.91^60 ≈ 0.4% retained/s → stops in ~0.5s (responsive, not icy)
 const BOOST_DUR_MS  = 700;
-const BOOST_CD_MS   = 3800;
-const DASH_IMPULSE  = 25;
+const BOOST_CD_MS   = 3500;
+const DASH_IMPULSE  = 28;
 
 // Ball-player collision
 const COL_REST = 1.5;

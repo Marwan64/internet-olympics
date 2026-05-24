@@ -370,6 +370,16 @@ export default function KnockbackArena() {
       ctx.lineWidth = isMe ? 3 : 2;
       ctx.stroke();
 
+      // Extra glow ring for local player
+      if (isMe) {
+        const glowPulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.004);
+        ctx.strokeStyle = `rgba(255,255,255,${0.35 + glowPulse * 0.45})`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(drawX, drawY, PLAYER_R + 5 + glowPulse * 2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
       // Facing indicator (small spike)
       const fx = drawX + Math.cos(serverP.f) * (PLAYER_R + 6);
       const fy = drawY + Math.sin(serverP.f) * (PLAYER_R + 6);
@@ -398,12 +408,19 @@ export default function KnockbackArena() {
       ctx.fillStyle = '#fff';
       ctx.fillText(pl?.avatar ?? '🎮', drawX, drawY + 8);
 
-      // Name
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(drawX - 38, drawY - PLAYER_R - 24, 76, 16);
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 11px sans-serif';
-      ctx.fillText(((isMe ? 'YOU' : pl?.username) ?? '?').slice(0, 10), drawX, drawY - PLAYER_R - 12);
+      // Name tag
+      const nameStr = ((isMe ? 'YOU ▼' : pl?.username) ?? '?').slice(0, 10);
+      ctx.font = `bold ${isMe ? 12 : 11}px sans-serif`;
+      const nameW = ctx.measureText(nameStr).width + 10;
+      ctx.fillStyle = isMe ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.6)';
+      ctx.beginPath();
+      (ctx as CanvasRenderingContext2D & { roundRect: (x:number, y:number, w:number, h:number, r:number) => void })
+        .roundRect?.(drawX - nameW / 2, drawY - PLAYER_R - 26, nameW, 16, 4) ??
+        ctx.fillRect(drawX - nameW / 2, drawY - PLAYER_R - 26, nameW, 16);
+      ctx.fill();
+      ctx.fillStyle = isMe ? '#ffffffee' : '#fff';
+      ctx.textAlign = 'center';
+      ctx.fillText(nameStr, drawX, drawY - PLAYER_R - 14);
 
       // Lives pips
       for (let i = 0; i < 3; i++) {

@@ -621,16 +621,30 @@ export default function ShoppingCart() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, 64, 64);
-    ctx.fillStyle = isMe ? 'rgba(124,58,237,0.9)' : 'rgba(0,0,0,0.75)';
+    if (isMe) {
+      // Glow ring for local player
+      const grad = ctx.createRadialGradient(32, 32, 18, 32, 32, 32);
+      grad.addColorStop(0, 'rgba(255,255,255,0)');
+      grad.addColorStop(0.7, 'rgba(255,255,255,0.18)');
+      grad.addColorStop(1, 'rgba(255,255,255,0.55)');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(32, 32, 32, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = isMe ? 'rgba(124,58,237,0.92)' : 'rgba(0,0,0,0.75)';
     ctx.beginPath();
-    ctx.arc(32, 32, 30, 0, Math.PI * 2);
+    ctx.arc(32, 32, isMe ? 28 : 26, 0, Math.PI * 2);
     ctx.fill();
-    ctx.font = '34px serif';
+    if (isMe) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
+    ctx.font = '30px serif';
     ctx.textAlign = 'center';
-    ctx.fillText(avatar, 32, 42);
+    ctx.fillText(avatar, 32, 40);
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 10px sans-serif';
-    ctx.fillText((isMe ? 'YOU' : username).slice(0, 8), 32, 58);
+    ctx.font = `bold ${isMe ? 11 : 10}px sans-serif`;
+    ctx.fillText((isMe ? 'YOU ▼' : username).slice(0, 8), 32, 58);
     tex.needsUpdate = true;
   }, []);
 

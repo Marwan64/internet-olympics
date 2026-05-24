@@ -708,6 +708,12 @@ function render(
     ctx.fill();
   }
   drawChar(ctx, state.x, state.y, color, avatar, false);
+  // YOU indicator — pulsing arrow above local player
+  const youPulse = 0.55 + 0.45 * Math.sin(performance.now() * 0.004);
+  ctx.font = 'bold 11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = `rgba(255,255,255,${youPulse})`;
+  ctx.fillText('YOU ▼', state.x + PW / 2, state.y - 6);
 
   ctx.restore();
 

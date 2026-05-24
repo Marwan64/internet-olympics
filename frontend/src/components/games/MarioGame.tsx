@@ -1208,13 +1208,20 @@ export default function MarioGame() {
 
       drawMario(ctx, lx, p.y, color, p.facing, walking, p.walkPhase, p.powerUp === 'star', p.powerUp === 'speed', false, p.powerUp === 'fire');
 
-      // YOU label
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(lx + PLAYER_W / 2 - 18, p.y - 18, 36, 14);
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 10px sans-serif';
+      // YOU label — pulsing arrow above player
+      const youPulse = 0.6 + 0.4 * Math.sin(now * 0.004);
+      ctx.fillStyle = `rgba(255,255,255,${youPulse})`;
+      ctx.font = 'bold 11px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('YOU', lx + PLAYER_W / 2, p.y - 8);
+      const youX = lx + PLAYER_W / 2;
+      // Pill background
+      ctx.fillStyle = `rgba(0,0,0,${0.45 * youPulse})`;
+      ctx.beginPath();
+      (ctx as CanvasRenderingContext2D & { roundRect: (x:number, y:number, w:number, h:number, r:number) => void })
+        .roundRect?.(youX - 22, p.y - 22, 44, 14, 4) ?? ctx.fillRect(youX - 22, p.y - 22, 44, 14);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,255,255,${youPulse})`;
+      ctx.fillText('YOU ▼', youX, p.y - 12);
       ctx.textAlign = 'left';
     } else {
       const remaining = Math.ceil((p.respawnAt - now) / 1000);

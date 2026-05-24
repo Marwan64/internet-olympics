@@ -13,8 +13,9 @@ const AH = 26;
 const GW = 8;
 const BALL_R_BASE = 0.7;
 const PL_R = 0.85;
-const PL_DRAG = 0.96;
-const PL_ACCEL = 55;
+const PL_DRAG = 0.91;          // must match backend
+const PL_DRAG_EXP = 60;        // backend physics Hz — used for frame-rate independent drag
+const PL_ACCEL = 100;          // must match backend
 const PL_MAX_SPD = 22;
 const PL_BOOST_SPD = 40;
 const DT_CAP = 0.05;
@@ -203,7 +204,7 @@ export default function PhysicsSoccer() {
   const [myTeam, setMyTeam]       = useState<0 | 1 | null>(null);
   const [boostPct, setBoostPct]   = useState(1);
   const [chaos, setChaos]         = useState<string | null>(null);
-  const [goalBanner, setGoalBanner] = useState<{ team: 0 | 1; msg: string } | null>(null);
+  const [goalBanner, setGoalBanner] = useState<{ team: 0 | 1; msg: string; scorer?: string } | null>(null);
   const [inReset, setInReset]     = useState(false);
 
   useEffect(() => {
@@ -284,7 +285,7 @@ export default function PhysicsSoccer() {
     // ── Player meshes — flat emoji discs ─────────────────────────────────────
     const playerMeshes = new Map<string, THREE.Group>();
 
-    function makeEmojiTexture(emoji: string, teamColor: number): THREE.CanvasTexture {
+    function makeEmojiTexture(emoji: string, teamColor: number, isLocal: boolean): THREE.CanvasTexture {
       const size = 256;
       const cv = document.createElement('canvas');
       cv.width = size; cv.height = size;
@@ -295,9 +296,9 @@ export default function PhysicsSoccer() {
       g.beginPath();
       g.arc(size / 2, size / 2, size / 2 - 6, 0, Math.PI * 2);
       g.fill();
-      // White border
-      g.strokeStyle = 'rgba(255,255,255,0.85)';
-      g.lineWidth = 10;
+      // White border (thicker for local player)
+      g.strokeStyle = isLocal ? '#ffffff' : 'rgba(255,255,255,0.85)';
+      g.lineWidth = isLocal ? 14 : 10;
       g.stroke();
       // Inner ring (subtle depth)
       g.strokeStyle = 'rgba(255,255,255,0.25)';
@@ -313,10 +314,34 @@ export default function PhysicsSoccer() {
       return new THREE.CanvasTexture(cv);
     }
 
+    function makeYouLabel(): THREE.Sprite {
+      const cv = document.createElement('canvas');
+      cv.width = 160; cv.height = 56;
+      const g2d = cv.getContext('2d')!;
+      g2d.clearRect(0, 0, 160, 56);
+      // Pill background
+      g2d.fillStyle = 'rgba(0,0,0,0.55)';
+      g2d.beginPath();
+      g2d.roundRect(4, 4, 152, 48, 14);
+      g2d.fill();
+      // Text
+      g2d.font = 'bold 26px sans-serif';
+      g2d.fillStyle = '#ffffff';
+      g2d.textAlign = 'center';
+      g2d.textBaseline = 'middle';
+      g2d.fillText('YOU ▼', 80, 28);
+      const tex = new THREE.CanvasTexture(cv);
+      const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+      spr.scale.set(2.8, 0.9, 1);
+      spr.position.set(0, 2.6, 0);
+      return spr;
+    }
+
     function getOrCreatePlayer(id: string, team: 0 | 1): THREE.Group {
       if (playerMeshes.has(id)) return playerMeshes.get(id)!;
       const g   = new THREE.Group();
       const col = TEAM_COLOR[team];
+      const isLocal = id === sock.id;
 
       // Look up this player's avatar from the room state
       const room = useGameStore.getState().room;
@@ -327,25 +352,40 @@ export default function PhysicsSoccer() {
       const disc = new THREE.Mesh(
         new THREE.CylinderGeometry(PL_R, PL_R, 0.38, 32),
         new THREE.MeshStandardMaterial({
-          map: makeEmojiTexture(emoji, col),
+          map: makeEmojiTexture(emoji, col, isLocal),
           roughness: 0.3,
           metalness: 0.15,
           emissive: new THREE.Color(col),
-          emissiveIntensity: 0.1,
+          emissiveIntensity: isLocal ? 0.25 : 0.1,
         })
       );
       disc.castShadow = true;
       disc.position.y = 0.19;
-      g.add(disc);
+      g.add(disc); // children[0]
 
       // Shadow ring on pitch
-      const ring = new THREE.Mesh(
+      const shadowRing = new THREE.Mesh(
         new THREE.RingGeometry(PL_R * 0.75, PL_R * 1.08, 32),
         new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25 })
       );
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.y = 0.01;
-      g.add(ring);
+      shadowRing.rotation.x = -Math.PI / 2;
+      shadowRing.position.y = 0.01;
+      g.add(shadowRing); // children[1]
+
+      // YOU indicator ring — pulsing outer glow, only visible for local player
+      const youRing = new THREE.Mesh(
+        new THREE.RingGeometry(PL_R * 1.22, PL_R * 1.55, 40),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0 })
+      );
+      youRing.rotation.x = -Math.PI / 2;
+      youRing.position.y = 0.03;
+      youRing.visible = isLocal;
+      g.add(youRing); // children[2]
+
+      // YOU label sprite — floats above, only for local player
+      const youLabel = makeYouLabel();
+      youLabel.visible = isLocal;
+      g.add(youLabel); // children[3]
 
       scene.add(g);
       playerMeshes.set(id, g);
@@ -416,19 +456,24 @@ export default function PhysicsSoccer() {
         local.assigned = true;
         setMyTeam(me.team);
       }
-      // Reconcile: snap own position from server (no full prediction for simplicity)
+      // Reconcile: gently nudge toward server position to correct drift without snapping
       if (me) {
-        local.x += (me.x - local.x) * 0.3;
-        local.z += (me.z - local.z) * 0.3;
+        local.x += (me.x - local.x) * 0.12;
+        local.z += (me.z - local.z) * 0.12;
       }
     };
 
-    const onGoal = (data: { team: 0 | 1; score: [number, number] }) => {
+    const onGoal = (data: { team: 0 | 1; score: [number, number]; scorer?: string | null }) => {
       setScore(data.score);
       soccer_goal();
-      const msg = data.team === local.team ? '⚽ GOAL!' : '😬 THEY SCORED!';
-      setGoalBanner({ team: data.team, msg });
-      setTimeout(() => setGoalBanner(null), 2200);
+      const isMyTeam = data.team === local.team;
+      const msg = isMyTeam ? '⚽ GOAL!' : '😬 THEY SCORED!';
+      // Look up scorer name
+      const room = useGameStore.getState().room;
+      const scorerPlayer = data.scorer ? room?.players.find(p => p.id === data.scorer) : null;
+      const scorerName = scorerPlayer?.username ?? null;
+      setGoalBanner({ team: data.team, msg, scorer: scorerName ?? undefined });
+      setTimeout(() => setGoalBanner(null), 2600);
       spawnGoalParticles(scene, data.team === 1 ? -AW / 2 + 1 : AW / 2 - 1, 0, TEAM_COLOR[data.team]);
     };
 
@@ -444,9 +489,15 @@ export default function PhysicsSoccer() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (sock as any).on('soccer:chaos', onChaos);
 
-    // ── Camera shake state ────────────────────────────────────────────────────
+    // ── Camera shake state (smooth damped oscillation, not raw random) ────────
     let shakeAmt = 0;
+    let shakeOffX = 0, shakeOffZ = 0;
+    let shakeVX = 0, shakeVZ = 0;
     let lastKickSound = 0; // debounce kick sfx
+
+    // ── Ball render position (lerped to smooth out collision snaps) ───────────
+    let ballRx = 0, ballRz = 0;
+    let ballInitialized = false;
 
     // ── Game loop ─────────────────────────────────────────────────────────────
     const clock = new THREE.Clock(true);
@@ -490,8 +541,11 @@ export default function PhysicsSoccer() {
         local.vz += dz * PL_ACCEL * dt;
         const spd = Math.hypot(local.vx, local.vz);
         if (spd > maxSpd) { local.vx *= maxSpd / spd; local.vz *= maxSpd / spd; }
-        local.vx *= PL_DRAG;
-        local.vz *= PL_DRAG;
+        // Frame-rate independent drag: PL_DRAG is defined per backend tick (1/60s)
+        // Raising it to (dt * PL_DRAG_EXP) keeps physics consistent at any refresh rate
+        const dragFactor = Math.pow(PL_DRAG, dt * PL_DRAG_EXP);
+        local.vx *= dragFactor;
+        local.vz *= dragFactor;
         local.x  += local.vx * dt;
         local.z  += local.vz * dt;
         local.x = Math.max(-AW / 2 + PL_R, Math.min(AW / 2 - PL_R, local.x));
@@ -514,26 +568,41 @@ export default function PhysicsSoccer() {
         const msSince = Math.min(Date.now() - clientT, 80);
         const frac    = msSince / 50; // 20Hz = 50ms interval
 
-        // Ball
-        const bx = snap.ball.x + snap.ball.vx * (msSince / 1000);
-        const bz = snap.ball.z + snap.ball.vz * (msSince / 1000);
+        // Ball — extrapolate forward from snapshot, then lerp render position to smooth collision snaps
+        const targetBx = snap.ball.x + snap.ball.vx * (msSince / 1000);
+        const targetBz = snap.ball.z + snap.ball.vz * (msSince / 1000);
         const br = snap.ball.r;
 
-        ballMesh.position.set(bx, br, bz);
+        if (!ballInitialized) {
+          ballRx = targetBx; ballRz = targetBz;
+          ballInitialized = true;
+        } else {
+          // Snap immediately if ball teleports (goal reset), lerp otherwise
+          const distToTarget = Math.hypot(targetBx - ballRx, targetBz - ballRz);
+          if (distToTarget > 6) {
+            ballRx = targetBx; ballRz = targetBz;
+          } else {
+            const lerpSpeed = Math.min(1, 22 * dt); // ~22/s convergence
+            ballRx += (targetBx - ballRx) * lerpSpeed;
+            ballRz += (targetBz - ballRz) * lerpSpeed;
+          }
+        }
+
+        ballMesh.position.set(ballRx, br, ballRz);
         ballMesh.rotation.y += snap.ball.spin * dt;
         ballMesh.rotation.x += Math.hypot(snap.ball.vx, snap.ball.vz) * 0.05;
 
         // Kick sound: local player close to ball and moving fast toward it
         if (local.assigned) {
           const ballSpd = Math.hypot(snap.ball.vx, snap.ball.vz);
-          const distToBall = Math.hypot(local.x - bx, local.z - bz);
+          const distToBall = Math.hypot(local.x - ballRx, local.z - ballRz);
           const playerSpd = Math.hypot(local.vx, local.vz);
-          if (distToBall < PL_R + BALL_R_BASE + 0.4 && ballSpd > 8 && playerSpd > 4 && performance.now() - lastKickSound > 350) {
+          if (distToBall < PL_R + BALL_R_BASE + 0.5 && ballSpd > 6 && playerSpd > 3 && performance.now() - lastKickSound > 300) {
             soccer_kick();
             lastKickSound = performance.now();
           }
           // Wall hit sound for ball
-          if ((Math.abs(bx) > AW / 2 - BALL_R_BASE - 0.2 || Math.abs(bz) > AH / 2 - BALL_R_BASE - 0.2) && ballSpd > 3 && performance.now() - lastKickSound > 200) {
+          if ((Math.abs(ballRx) > AW / 2 - BALL_R_BASE - 0.2 || Math.abs(ballRz) > AH / 2 - BALL_R_BASE - 0.2) && ballSpd > 3 && performance.now() - lastKickSound > 200) {
             soccer_wallHit();
             lastKickSound = performance.now();
           }
@@ -541,9 +610,9 @@ export default function PhysicsSoccer() {
         // Scale ball mesh if giant_ball
         const scale = br / BALL_R_BASE;
         ballMesh.scale.setScalar(scale);
-        glowSprite.position.set(bx, br + 0.2, bz);
+        glowSprite.position.set(ballRx, br + 0.2, ballRz);
         glowSprite.scale.set(5 * scale, 5 * scale, 1);
-        shadowMesh.position.set(bx, 0.05, bz);
+        shadowMesh.position.set(ballRx, 0.05, ballRz);
         shadowMesh.scale.set(scale, scale, scale);
 
         // Players
@@ -569,9 +638,24 @@ export default function PhysicsSoccer() {
           // Boost pulse on disc
           const disc = g.children[0] as THREE.Mesh;
           const mat  = disc.material as THREE.MeshStandardMaterial;
-          const bi   = (isMe ? local.boosting : sp.boosting) ? 0.55 + 0.35 * Math.sin(now * 0.02) : 0.1;
+          const bi   = (isMe ? local.boosting : sp.boosting) ? 0.55 + 0.35 * Math.sin(now * 0.02) : (isMe ? 0.2 : 0.08);
           mat.emissive.set(TEAM_COLOR[sp.team]);
           mat.emissiveIntensity = bi;
+
+          // YOU ring pulse — only on local player
+          if (isMe) {
+            const youRing = g.children[2] as THREE.Mesh;
+            const youMat  = youRing.material as THREE.MeshBasicMaterial;
+            // Pulse between 0.5 and 1.0
+            youMat.opacity = 0.55 + 0.45 * Math.sin(now * 0.004);
+            // When boosting, tint to team color + white flash
+            if (local.boosting) {
+              youMat.color.set(TEAM_COLOR[sp.team]);
+              youMat.opacity = Math.min(1, youMat.opacity + 0.2);
+            } else {
+              youMat.color.set(0xffffff);
+            }
+          }
         }
 
         // Hide removed players
@@ -581,21 +665,32 @@ export default function PhysicsSoccer() {
         }
       }
 
-      // ── Camera shake decay ────────────────────────────────────────────────
-      shakeAmt *= 0.88;
-      camera.position.set(
-        0 + (Math.random() - 0.5) * shakeAmt,
-        32,
-        16 + (Math.random() - 0.5) * shakeAmt,
-      );
+      // ── Camera shake — smooth damped spring oscillator, not raw random ────
+      if (shakeAmt > 0.005) {
+        // Spring: frequency ~14Hz, damping ratio 0.6 → quick settle, no jitter
+        const freq = 14, damp = 0.6;
+        const k = freq * freq, c = 2 * freq * damp;
+        shakeVX += (-k * shakeOffX - c * shakeVX) * dt;
+        shakeVZ += (-k * shakeOffZ - c * shakeVZ) * dt;
+        shakeOffX += shakeVX * dt;
+        shakeOffZ += shakeVZ * dt;
+        shakeAmt *= Math.pow(0.75, dt * 60); // frame-rate independent decay
+      } else {
+        shakeAmt = 0; shakeOffX = 0; shakeOffZ = 0; shakeVX = 0; shakeVZ = 0;
+      }
+      camera.position.set(shakeOffX, 32, 16 + shakeOffZ);
 
       renderer.render(scene, camera);
     };
 
     animate();
 
-    // Shake on goal
-    const onGoalShake = () => { shakeAmt = 1.2; };
+    // Shake on goal — give the spring an initial velocity impulse instead of raw displacement
+    const onGoalShake = () => {
+      shakeAmt = 0.3; // reduced from 1.2 — still satisfying but not violently disorienting
+      shakeVX = (Math.random() - 0.5) * 5;
+      shakeVZ = (Math.random() - 0.5) * 5;
+    };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (sock as any).on('soccer:goal', onGoalShake);
 
@@ -645,11 +740,13 @@ export default function PhysicsSoccer() {
         </span>
       </div>
 
-      {/* My team indicator */}
+      {/* My team indicator — shows which team you're on */}
       {myTeam !== null && (
-        <div className="absolute top-3 left-3 glass rounded-xl px-3 py-2 pointer-events-none select-none flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ background: TEAM_HEX[myTeam] }} />
-          <span className="text-white text-sm font-bold">{TEAM_NAME[myTeam]} Team</span>
+        <div className="absolute top-3 left-3 pointer-events-none select-none flex items-center gap-2 px-3 py-2 rounded-xl"
+          style={{ background: `${TEAM_HEX[myTeam]}33`, border: `2px solid ${TEAM_HEX[myTeam]}`, backdropFilter: 'blur(8px)' }}>
+          <div className="w-4 h-4 rounded-full border-2 border-white" style={{ background: TEAM_HEX[myTeam] }} />
+          <span className="text-white text-sm font-black tracking-wide">{TEAM_NAME[myTeam]} Team</span>
+          <span className="text-xs font-bold opacity-60" style={{ color: TEAM_HEX[myTeam] }}>← YOU</span>
         </div>
       )}
 
@@ -767,8 +864,8 @@ export default function PhysicsSoccer() {
               style={{ background: `${TEAM_HEX[goalBanner.team]}cc`, border: `4px solid ${TEAM_HEX[goalBanner.team]}` }}
             >
               {goalBanner.msg}
-              <div className="text-xl mt-1 font-sans font-normal opacity-80">
-                {TEAM_NAME[goalBanner.team]} scores!
+              <div className="text-xl mt-1 font-sans font-normal opacity-90">
+                {goalBanner.scorer ? `${goalBanner.scorer} scored for ` : ''}{TEAM_NAME[goalBanner.team]}!
               </div>
             </div>
           </motion.div>
