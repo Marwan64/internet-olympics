@@ -222,11 +222,13 @@ export default function FloorIsLava() {
   const [joyVisual, setJoyVisual] = useState({ x: 0, y: 0 });
   const [batReady, setBatReady]   = useState(true);
 
-  const [eliminated, setEliminated] = useState(false);
-  const [aliveCount, setAliveCount] = useState(0);
-  const [heightM, setHeightM]       = useState(0);
-  const [lavaWarn, setLavaWarn]     = useState(false);
-  const [chaos, setChaos]           = useState<string | null>(null);
+  const [eliminated, setEliminated]       = useState(false);
+  const [aliveCount, setAliveCount]       = useState(0);
+  const [heightM, setHeightM]             = useState(0);
+  const [lavaWarn, setLavaWarn]           = useState(false);
+  const [chaos, setChaos]                 = useState<string | null>(null);
+  const [spectatingName, setSpectatingName] = useState<string | null>(null);
+  const spectateIdRef = useRef<string | null>(null); // socket ID of spectated player
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -406,7 +408,8 @@ export default function FloorIsLava() {
     // ── Camera state ──────────────────────────────────────────────────────────
     const camPos    = new THREE.Vector3(0, 12, 16);
     const camTarget = new THREE.Vector3(0, 4, 0);
-    let spectatorT  = 0;
+    let spectatorT  = 0; // for fallback orbit
+    let spectatorYaw = 0; // slow auto-rotate around spectated player
 
     // ── Lava tracking ─────────────────────────────────────────────────────────
     let lavaY    = -3;
@@ -431,6 +434,22 @@ export default function FloorIsLava() {
     const batState = { swinging: false, t: 0, cooldown: 0, hitSent: false };
     let isEliminated = false;
 
+    // ── Spectator helpers ────────────────────────────────────────────────────
+    const getAliveGhostIds = () =>
+      [...ghosts.entries()].filter(([, g]) => g.visible).map(([id]) => id);
+
+    const pickNextSpectateTarget = () => {
+      const alive = getAliveGhostIds();
+      if (alive.length === 0) { spectateIdRef.current = null; setSpectatingName(null); return; }
+      const cur = spectateIdRef.current;
+      const idx = cur ? alive.indexOf(cur) : -1;
+      const next = alive[(idx + 1) % alive.length];
+      spectateIdRef.current = next;
+      const room = useGameStore.getState().room;
+      const pl = room?.players.find(p => p.id === next);
+      setSpectatingName(pl?.username ?? '???');
+    };
+
     const onKD = (e: KeyboardEvent) => {
       switch (e.code) {
         case 'KeyW':    keys.w     = true; break;
@@ -442,6 +461,9 @@ export default function FloorIsLava() {
         case 'KeyQ':    keys.q     = true; break;
         case 'KeyE':    keys.e     = true; break;
         case 'KeyF':    keys.f     = true; break;
+        case 'Tab':
+          if (isEliminated) { e.preventDefault(); pickNextSpectateTarget(); }
+          break;
       }
     };
     const onKU = (e: KeyboardEvent) => {
@@ -501,6 +523,8 @@ export default function FloorIsLava() {
         isEliminated = true;
         ps.alive = false;
         setEliminated(true);
+        // Auto-pick first alive ghost to spectate
+        setTimeout(() => pickNextSpectateTarget(), 100);
       }
     };
 
@@ -768,16 +792,29 @@ export default function FloorIsLava() {
       let desiredCam: THREE.Vector3;
 
       if (isEliminated) {
-        // Spectator orbit — circle above midpoint of action
-        spectatorT += dt * 0.3;
-        const radius = 25;
-        const watchH = lavaY + 18;
-        targetLook = new THREE.Vector3(0, watchH - 4, 0);
-        desiredCam = new THREE.Vector3(
-          Math.sin(spectatorT) * radius,
-          watchH,
-          Math.cos(spectatorT) * radius,
-        );
+        spectatorYaw += dt * 0.28; // slow auto-orbit
+        const targetGhost = spectateIdRef.current ? ghosts.get(spectateIdRef.current) : null;
+
+        if (targetGhost && targetGhost.visible) {
+          // Follow the spectated player with a cinematic trailing cam
+          const gp = targetGhost.position;
+          targetLook = new THREE.Vector3(gp.x, gp.y + 1.2, gp.z);
+          desiredCam = new THREE.Vector3(
+            gp.x + Math.sin(spectatorYaw) * CAM_DIST,
+            gp.y + CAM_H + 2,
+            gp.z + Math.cos(spectatorYaw) * CAM_DIST,
+          );
+        } else {
+          // No valid target — pick next or orbit above centre
+          if (spectateIdRef.current) pickNextSpectateTarget();
+          spectatorT += dt * 0.3;
+          const watchH = lavaY + 18;
+          targetLook = new THREE.Vector3(0, watchH - 4, 0);
+          desiredCam = new THREE.Vector3(
+            Math.sin(spectatorT) * 25, watchH,
+            Math.cos(spectatorT) * 25,
+          );
+        }
       } else {
         const lookTarget = ps.pos.clone().add(new THREE.Vector3(0, 1, 0));
         const back = new THREE.Vector3(
@@ -896,20 +933,49 @@ export default function FloorIsLava() {
           )}
         </AnimatePresence>
 
-        {/* Eliminated banner */}
+        {/* Eliminated flash banner — fades out after 2.5s */}
         <AnimatePresence>
           {eliminated && (
             <motion.div
               key="elim"
               initial={{ opacity: 0, scale: 0.7 }}
               animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
               transition={{ type: 'spring', stiffness: 200, damping: 15 }}
-              className="absolute inset-0 flex flex-col items-center justify-center"
+              className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
+              // Auto-dismiss after 2.5s so the spectator view is unobstructed
+              onAnimationComplete={() => setTimeout(() => {}, 2500)}
             >
-              <div className="glass rounded-3xl px-10 py-8 text-center shadow-2xl">
+              <motion.div
+                animate={{ opacity: [1, 1, 0] }}
+                transition={{ duration: 2.5, times: [0, 0.6, 1] }}
+                className="glass rounded-3xl px-10 py-8 text-center shadow-2xl"
+              >
                 <div className="text-7xl mb-4">🌋</div>
                 <div className="font-display font-black text-4xl text-white mb-2">ELIMINATED!</div>
-                <div className="text-white/50 text-base">Spectating the survivors...</div>
+                <div className="text-white/50 text-base">Now spectating…</div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Spectator HUD — shown while watching another player */}
+        <AnimatePresence>
+          {eliminated && spectatingName && (
+            <motion.div
+              key="spectate-hud"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-none select-none"
+            >
+              <div className="flex flex-col items-center gap-1">
+                <div className="px-4 py-1.5 rounded-full text-sm font-bold text-white flex items-center gap-2"
+                  style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.15)' }}>
+                  <span className="text-base">👁</span>
+                  <span>SPECTATING</span>
+                  <span className="text-orange-400 font-black">{spectatingName}</span>
+                </div>
+                <div className="text-white/40 text-xs font-mono">TAB to switch player</div>
               </div>
             </motion.div>
           )}

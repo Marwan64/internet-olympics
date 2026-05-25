@@ -168,7 +168,7 @@ interface PhysState {
   checkpoint: number; deaths: number; finished: boolean;
   facing: 1 | -1; flashMs: number;
 }
-interface Ghost { x: number; y: number; cp: number }
+interface Ghost { x: number; y: number; cp: number; finished?: boolean; username?: string }
 
 interface ResolvedPlat { x: number; y: number; w: number; h: number; idx: number; ref: Plat }
 interface CrumbleState { stoodSince: number; broken: boolean; respawnAt: number }
@@ -199,14 +199,23 @@ export default function RageObby() {
     const myId = getSocket().id;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const onState = (data: { players: any[] }) => {
+      const room = useGameStore.getState().room;
       for (const p of data.players) {
         if (p.id === myId) continue;
-        ghostsRef.current.set(p.id, { x: p.x, y: p.y, cp: p.cp });
+        const pl = room?.players.find((rp: any) => rp.id === p.id || rp.socketId === p.id);
+        ghostsRef.current.set(p.id, {
+          x: p.x, y: p.y, cp: p.cp,
+          finished: p.x >= FINISH_X,
+          username: pl?.username,
+        });
       }
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const onFinished = (data: { id: string }) => {
       if (data.id === myId) stateRef.current.finished = true;
+      // Mark ghost as finished too
+      const g = ghostsRef.current.get(data.id);
+      if (g) g.finished = true;
     };
     socket.on('obby:state', onState);
     socket.on('obby:finished', onFinished);
@@ -482,9 +491,17 @@ function render(
   const room       = useGameStore.getState().room;
   const mySocketId = getSocket().id;
 
-  // Camera: slightly look ahead in movement direction
-  const camX = Math.max(0, Math.min(WW - CW,
-    state.x + PW / 2 - CW * 0.38 + state.vx * 0.12));
+  // Camera: when finished, follow the furthest-ahead unfinished ghost; otherwise follow self
+  let spectateTarget: Ghost | null = null;
+  if (state.finished) {
+    let leadX = -1;
+    for (const g of ghosts.values()) {
+      if (!g.finished && g.x > leadX) { leadX = g.x; spectateTarget = g; }
+    }
+  }
+  const followX = spectateTarget ? spectateTarget.x + PW / 2 : state.x + PW / 2;
+  const followVx = spectateTarget ? 0 : state.vx * 0.12;
+  const camX = Math.max(0, Math.min(WW - CW, followX - CW * 0.38 + followVx));
 
   // ── Sky gradient ──
   const sky = ctx.createLinearGradient(0, 0, 0, CH);
@@ -708,14 +725,36 @@ function render(
     ctx.fill();
   }
   drawChar(ctx, state.x, state.y, color, avatar, false);
-  // YOU indicator — pulsing arrow above local player
-  const youPulse = 0.55 + 0.45 * Math.sin(performance.now() * 0.004);
-  ctx.font = 'bold 11px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillStyle = `rgba(255,255,255,${youPulse})`;
-  ctx.fillText('YOU ▼', state.x + PW / 2, state.y - 6);
+  // YOU indicator — pulsing arrow above local player (only when not finished)
+  if (!state.finished) {
+    const youPulse = 0.55 + 0.45 * Math.sin(performance.now() * 0.004);
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = `rgba(255,255,255,${youPulse})`;
+    ctx.fillText('YOU ▼', state.x + PW / 2, state.y - 6);
+  }
 
-  ctx.restore();
+  ctx.restore(); // end of world-space drawing
+
+  // ── Spectator HUD (screen-space) ──
+  if (state.finished && spectateTarget) {
+    const pulse = 0.72 + 0.28 * Math.sin(performance.now() * 0.004);
+    const label = `👁  SPECTATING  ${spectateTarget.username ?? '???'}`;
+    ctx.font = 'bold 13px sans-serif';
+    const tw = ctx.measureText(label).width;
+    const pillW = tw + 28;
+    const pillX = CW / 2 - pillW / 2;
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = 'rgba(0,0,0,0.62)';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (ctx as any).roundRect?.(pillX, 10, pillW, 30, 10) ?? ctx.fillRect(pillX, 10, pillW, 30);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, CW / 2, 30);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
+  }
 
   // ── HUD ──
   ctx.fillStyle = 'rgba(0,0,0,0.65)';

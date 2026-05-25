@@ -546,6 +546,7 @@ export default function MarioGame() {
   const powerUpsRef = useRef<PowerUpClient[]>([]);
   const fireballsRef = useRef<Fireball[]>([]);
   const camRef = useRef({ x: 0 });
+  const spectatingRef = useRef<{ name: string; id: string } | null>(null);
   const inputRef = useRef({ left: false, right: false, jump: false, fire: false, firePrev: false });
   const lastSendRef = useRef(0);
   const animRef = useRef(0);
@@ -920,8 +921,30 @@ export default function MarioGame() {
       sendInput('level_complete', {});
     }
 
-    // Camera follow
-    const targetCamX = p.x - CANVAS_W * 0.35;
+    // Camera follow — after finishing, follow the furthest-ahead unfinished player
+    let targetCamX: number;
+    if (p.finished) {
+      // Find the leading unfinished remote player
+      let leadX = -1;
+      let leadId = '';
+      for (const [id, rp] of remotePlayers.current) {
+        if (!rp.finished && rp.x > leadX) { leadX = rp.x; leadId = id; }
+      }
+      if (leadX >= 0) {
+        targetCamX = leadX - CANVAS_W * 0.35;
+        // Update spectating label
+        const room = useGameStore.getState().room;
+        const pl = room?.players.find(p2 => p2.socketId === leadId || p2.id === leadId);
+        spectatingRef.current = pl ? { name: pl.username, id: leadId } : null;
+      } else {
+        // Everyone finished — stay at finish
+        targetCamX = camRef.current.x;
+        spectatingRef.current = null;
+      }
+    } else {
+      targetCamX = p.x - CANVAS_W * 0.35;
+      spectatingRef.current = null;
+    }
     camRef.current.x += (targetCamX - camRef.current.x) * Math.min(1, dt * 6);
     camRef.current.x = Math.max(0, Math.min(LEVEL_WIDTH - CANVAS_W, camRef.current.x));
 
@@ -1278,6 +1301,23 @@ export default function MarioGame() {
       ctx.textAlign = 'center';
       ctx.fillText(finishedMsgRef.current, CANVAS_W / 2, CANVAS_H / 2 + 8);
       ctx.textAlign = 'left';
+    }
+
+    // Spectator HUD — shown when finished and watching another player
+    const spec = spectatingRef.current;
+    if (spec && p.finished) {
+      const pulse = 0.7 + 0.3 * Math.sin(now * 0.004);
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.beginPath();
+      (ctx as CanvasRenderingContext2D & { roundRect: (x:number,y:number,w:number,h:number,r:number)=>void })
+        .roundRect?.(CANVAS_W / 2 - 130, 10, 260, 34, 10) ?? ctx.fillRect(CANVAS_W / 2 - 130, 10, 260, 34);
+      ctx.fill();
+      ctx.font = 'bold 14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(`👁 SPECTATING  ${spec.name}`, CANVAS_W / 2, 32);
+      ctx.globalAlpha = 1;
     }
   }, []);
 
